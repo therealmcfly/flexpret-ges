@@ -7,3 +7,4 @@ ProcessorCount(NCORES)
 
 
 add_subdirectory(zedboard)
+add_subdirectory(de1-soc)
