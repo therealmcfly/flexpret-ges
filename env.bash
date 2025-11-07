@@ -22,6 +22,6 @@ export FP_PATH="$FLEXPRET_ROOT"
 export FP_SDK_PATH="$FLEXPRET_ROOT/sdk"
 
 # FPGA UART configuration
-export FLASH_DEVICE="/dev/ttyUSB0"
+export FP_FLASH_DEVICE="/dev/ttyUSB0"
 export FP_SDK_FPGA_FLASH_DEVICE="/dev/ttyUSB0"
 export BAUDRATE=115200
