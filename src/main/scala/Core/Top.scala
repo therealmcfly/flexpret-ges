@@ -8,8 +8,15 @@ abstract class AbstractTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends Mo
     val core = Module(new Core(cfg, cfgHash))
 
     val wbMaster = Module(new WishboneMaster(cfg.busAddrBits)(cfg))
-    val wbUart   = Module(new WishboneUart()(cfg))
-    val wbBus    = Module(new WishboneBus(cfg.busAddrBits, Seq(4)))
+
+		// // Original instantiation with single UART
+    // val wbUart   = Module(new WishboneUart()(cfg)) // Original single UART
+    // val wbBus    = Module(new WishboneBus(cfg.busAddrBits, Seq(4))) // Original bus with single device (UART)
+
+		// New instantiation with two UARTs
+		val wbUart0  = Module(new WishboneUart()(cfg)) // Rename UART to UART0
+		val wbUart1  = Module(new WishboneUart()(cfg)) // New UART (UART1)
+		val wbBus    = Module(new WishboneBus(cfg.busAddrBits, Seq(4, 4))) // Update bus to have 2 devices (UART0 and UART1) each with address width 4
 
     // Connect WB bus to FlexPRET bus
     wbMaster.busIO <> core.io.bus
@@ -17,8 +24,12 @@ abstract class AbstractTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends Mo
     // Connect WB bus to WB master
     wbBus.io.wbMaster <> wbMaster.wbIO
 
-    // Connect WB bus to WB UART
-    wbBus.io.wbDevices(0) <> wbUart.io.port
+    // // Connect WB bus to WB UART
+    // wbBus.io.wbDevices(0) <> wbUart.io.port // Original single UART connection
+
+		// New connections for two UARTs
+		wbBus.io.wbDevices(0) <> wbUart0.io.port // Connect first UART to first bus device
+		wbBus.io.wbDevices(1) <> wbUart1.io.port // Connect second UART to second bus device
 } 
 
 class VerilatorTopIO(cfg: FlexpretConfiguration) extends Bundle {
@@ -39,8 +50,8 @@ class VerilatorTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends AbstractTo
     io.gpio <> core.io.gpio
 
     // Connect rx tx signals
-    io.uart.tx := wbUart.ioUart.tx
-    wbUart.ioUart.rx := io.uart.rx
+    io.uart.tx := wbUart0.ioUart.tx
+    wbUart0.ioUart.rx := io.uart.rx
     
     core.io.int_exts <> io.int_exts
 
@@ -62,6 +73,12 @@ class FpgaTopIO(cfg: FlexpretConfiguration) extends Bundle {
         val rx = Input(Bool())
         val tx = Output(Bool())
     }
+		// New UART interface
+		val uart1 = new Bundle {
+			val rx = Input(Bool())
+			val tx = Output(Bool())
+		}
+		
     val int_exts = Input(Vec(cfg.threads, Bool()))
 }
 
@@ -71,9 +88,13 @@ class FpgaTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends AbstractTop(cfg
     io.gpio <> core.io.gpio
     core.io.int_exts <> io.int_exts
 
-    // Connect rx tx signals
-    io.uart.tx := wbUart.ioUart.tx
-    wbUart.ioUart.rx := io.uart.rx
+    // Connect rx tx signals for UART0
+    io.uart.tx := wbUart0.ioUart.tx
+    wbUart0.ioUart.rx := io.uart.rx
+
+		// Connect rx tx signals for New UART1 
+		io.uart1.tx := wbUart1.ioUart.tx
+		wbUart1.ioUart.rx := io.uart1.rx
 
     // Drive bus input to 0
     core.io.dmem.driveDefaultsFlipped()
