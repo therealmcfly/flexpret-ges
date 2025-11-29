@@ -40,7 +40,7 @@ module Top(
   // Set unused GPIO pins to high-Z
   genvar i;
   generate
-    for (i = 3; i < 36; i = i + 1) begin : gpio_unused
+    for (i = 6; i < 36; i = i + 1) begin : gpio_unused
       assign GPIO_0[i] = 1'bz;
     end
   endgenerate
@@ -58,11 +58,19 @@ module Top(
 		// new UART1 ports for UART1
 		.io_uart1_tx(uart1_tx),
 		.io_uart1_rx(uart1_rx),
-    .io_gpio_in_0(SW[1:0]),    // Use SW[1:0] for GPIO inputs
+
+		// 
+    .io_gpio_in_0(SW[0]),    // Use SW[0] for GPIO inputs
+		.io_gpio_in_1(SW[1]), 	// Use SW[1] for GPIO inputs
+		
+		.io_gpio_in_2(KEY[2]), 
+
     .io_int_exts_1(KEY[0]),    // Use KEY[0] for external interrupt 1
     // .io_int_exts_2(KEY[1]),    // Use KEY[1] for external interrupt 2
     // .io_rfu_signals_in_0(rfu_in),
     // .io_rfu_signals_out_0(rfu_out)
+
+		//
   );
 
   assign LEDR[7:0] = leds_internal;
