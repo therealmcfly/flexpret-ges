@@ -52,6 +52,13 @@ class VerilatorTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends AbstractTo
     // Connect rx tx signals
     io.uart.tx := wbUart0.ioUart.tx
     wbUart0.ioUart.rx := io.uart.rx
+
+		// ------------------------------------------------------
+    // FIX FOR FIRRTL ERROR: UART1 WAS NEVER WIRED
+    // ------------------------------------------------------
+    wbUart1.ioUart.rx := false.B        // Give it a valid input
+    wbUart1.ioUart.tx := DontCare       // Output is unused in emulator
+    // ------------------------------------------------------
     
     core.io.int_exts <> io.int_exts
 

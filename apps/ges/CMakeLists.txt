@@ -12,8 +12,24 @@ project(ges
 set(DEBUG true)
 set(TARGET "fpga")
 
-add_executable(ges ges.c)
+# Automatically collect ALL .c files in src/
+file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 
+# Create the executable with all sources
+add_executable(ges ${APP_SOURCES})
+
+# Add your include directory
+# target_include_directories(ges PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}/inc
+# )
+
+# Add SDK include directory AND your own include directory
+target_include_directories(ges PRIVATE
+    ${FP_SDK_PATH}/lib/include       # <-- REQUIRED for hwconfig.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/inc
+)
+
+# FlexPRET integration
 include($ENV{FP_SDK_PATH}/cmake/fp-app.cmake)
 
 # Add sdk as subdirectory out-of-tree and link it

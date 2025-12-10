@@ -4,10 +4,11 @@ set(PART 5CSEMA5F31C6N)
 
 set(FP_FPGA_BOARD_PATH ${CMAKE_CURRENT_LIST_DIR})
 
-add_subdirectory(fp-bootloader)
-# add_subdirectory(fp-blinky)
-# add_subdirectory(fp-rfu)
-# add_subdirectory(leds)
+add_subdirectory(fp-bootloader) # bootloader wont work without adding support for multithread
+# add_subdirectory(fp-blinky) # simple led blinky example
+# add_subdirectory(fp-rfu) # reactivity test
+# add_subdirectory(leds) # simple led control example
+# add_subdirectory(fp-add-mt) # fpga adder example project
 
 # add_dependencies(copy_ispm_mem)
 
@@ -72,7 +73,7 @@ configure_file(
 add_custom_command(
   OUTPUT ${CMAKE_BINARY_DIR}/fpga/de1-soc/FpgaTop.v
   COMMAND ${CMAKE_COMMAND} -E echo "Generating Verilog for DE1-SoC"
-  COMMAND sbt 'run fpga h0 --no-dedup --target-dir ${CMAKE_BINARY_DIR}/fpga/de1-soc'
+  COMMAND sbt "run fpga h${CRC32_HASH} --no-dedup --target-dir ${CMAKE_BINARY_DIR}/fpga/de1-soc"
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Generating Verilog for DE1-SoC (run from project root)"
 )
