@@ -64,6 +64,7 @@ module Top(
 		.io_gpio_in_1(SW[1]), 	// Use SW[1] for GPIO inputs
 		
 		.io_gpio_in_2(KEY[2]), 
+		.io_gpio_in_3(KEY[1]), 
 
     .io_int_exts_1(KEY[0]),    // Use KEY[0] for external interrupt 1
     // .io_int_exts_2(KEY[1]),    // Use KEY[1] for external interrupt 2

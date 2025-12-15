@@ -1,7 +1,6 @@
 #include "ring_buffer.h"
-#include "global.h"
 
-// #include <stdio.h>
+#include <stdio.h>
 #include <stddef.h> // for NULL
 
 #define WRITE_COUNT_INIT_VAL 0
