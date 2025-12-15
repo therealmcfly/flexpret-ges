@@ -16,7 +16,8 @@ abstract class AbstractTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends Mo
 		// New instantiation with two UARTs
 		val wbUart0  = Module(new WishboneUart()(cfg)) // Rename UART to UART0
 		val wbUart1  = Module(new WishboneUart()(cfg)) // New UART (UART1)
-		val wbBus    = Module(new WishboneBus(cfg.busAddrBits, Seq(4, 4))) // Update bus to have 2 devices (UART0 and UART1) each with address width 4
+		val wbUart2  = Module(new WishboneUart()(cfg)) // New UART (UART1)
+		val wbBus    = Module(new WishboneBus(cfg.busAddrBits, Seq(4, 4, 4))) // Update bus to have 2 devices (UART0 and UART1) each with address width 4
 
     // Connect WB bus to FlexPRET bus
     wbMaster.busIO <> core.io.bus
@@ -30,6 +31,7 @@ abstract class AbstractTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends Mo
 		// New connections for two UARTs
 		wbBus.io.wbDevices(0) <> wbUart0.io.port // Connect first UART to first bus device
 		wbBus.io.wbDevices(1) <> wbUart1.io.port // Connect second UART to second bus device
+		wbBus.io.wbDevices(2) <> wbUart2.io.port // Connect second UART to second bus device
 } 
 
 class VerilatorTopIO(cfg: FlexpretConfiguration) extends Bundle {
@@ -54,11 +56,15 @@ class VerilatorTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends AbstractTo
     wbUart0.ioUart.rx := io.uart.rx
 
 		// ------------------------------------------------------
-    // FIX FOR FIRRTL ERROR: UART1 WAS NEVER WIRED
+    // FIX FOR FIRRTL ERROR: UART1 and UART2 WAS NEVER WIRED
     // ------------------------------------------------------
     wbUart1.ioUart.rx := false.B        // Give it a valid input
     wbUart1.ioUart.tx := DontCare       // Output is unused in emulator
+		wbUart2.ioUart.rx := false.B        // Give it a valid input
+    wbUart2.ioUart.tx := DontCare       // Output is unused in emulator
     // ------------------------------------------------------
+
+		
     
     core.io.int_exts <> io.int_exts
 
@@ -80,8 +86,13 @@ class FpgaTopIO(cfg: FlexpretConfiguration) extends Bundle {
         val rx = Input(Bool())
         val tx = Output(Bool())
     }
-		// New UART interface
+		// New UART1 interface
 		val uart1 = new Bundle {
+			val rx = Input(Bool())
+			val tx = Output(Bool())
+		}
+		// New UART2 interface
+		val uart2 = new Bundle {
 			val rx = Input(Bool())
 			val tx = Output(Bool())
 		}
@@ -102,6 +113,10 @@ class FpgaTop(cfg: FlexpretConfiguration, cfgHash: UInt) extends AbstractTop(cfg
 		// Connect rx tx signals for New UART1 
 		io.uart1.tx := wbUart1.ioUart.tx
 		wbUart1.ioUart.rx := io.uart1.rx
+
+		// Connect rx tx signals for New UART1 
+		io.uart2.tx := wbUart2.ioUart.tx
+		wbUart2.ioUart.rx := io.uart2.rx
 
     // Drive bus input to 0
     core.io.dmem.driveDefaultsFlipped()

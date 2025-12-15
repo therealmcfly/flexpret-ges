@@ -112,7 +112,8 @@ case class FlexpretConfiguration(
 
   // Bus
   // upper bits are for thread ID
-  val busAddrBits   = 10
+  // val busAddrBits   = 10 // original
+  val busAddrBits   = 16 // increased to 16 to accomodate more UARTs
 
   // Memory Protection
   val memRegions    = 8

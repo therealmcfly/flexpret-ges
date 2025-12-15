@@ -4,8 +4,8 @@
 
 int16_t recv_from_gut()
 {
-	uint8_t lo = uart_receive(UART1_BASE);
-	uint8_t hi = uart_receive(UART1_BASE);
+	uint8_t lo = uart_receive(UART2_BASE);
+	uint8_t hi = uart_receive(UART2_BASE);
 
 	int16_t value = (int16_t)((hi << 8) | lo);
 	// printf("Received: %d\n", value);
@@ -23,5 +23,5 @@ int16_t recv_from_gut()
 
 void send_to_gut(int16_t value)
 {
-	uart_send(UART1_BASE, value);
+	uart_send(UART2_BASE, value);
 }

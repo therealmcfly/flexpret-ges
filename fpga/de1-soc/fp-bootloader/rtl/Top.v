@@ -20,9 +20,10 @@ module Top(
 
   // UART signals using specific GPIO pins // Existing UART0
   wire uart_tx, uart_rx;
-
 	// New UART1
 	wire uart1_tx, uart1_rx;
+	// New UART2
+	wire uart2_tx, uart2_rx;
   
   // Assign UART to specific GPIO pins // Existing UART0
   assign GPIO_0[0] = uart_tx;  // UART TX on GPIO_0[0] // TX0
@@ -33,6 +34,11 @@ module Top(
 	assign GPIO_0[3] = uart1_tx;  // TX1
 	assign uart1_rx  = GPIO_0[4]; // RX1
   assign GPIO_0[5] = 1'b0;  // gnd 
+
+		// Assign UART2 to GPIO_0[6:7]
+	assign GPIO_0[6] = uart2_tx;  // TX1
+	assign uart2_rx  = GPIO_0[7]; // RX1
+  assign GPIO_0[8] = 1'b0;  // gnd 
 
   // assign GPIO_0[4:11] = rfu_in;
   // assign rfu_out = GPIO_0[12:19];
@@ -58,6 +64,9 @@ module Top(
 		// new UART1 ports for UART1
 		.io_uart1_tx(uart1_tx),
 		.io_uart1_rx(uart1_rx),
+		// new UART1 ports for UART1
+		.io_uart2_tx(uart2_tx),
+		.io_uart2_rx(uart2_rx),
 
 		// 
     .io_gpio_in_0(SW[0]),    // Use SW[0] for GPIO inputs
