@@ -12,6 +12,7 @@
  * ------------------------------------------------------------------*/
 #define UART0_BASE 0x0000UL
 #define UART1_BASE 0x0010UL
+#define UART2_BASE 0x0020UL
 
 // On the Wishbone bus, the UART has address 0
 // #define UART_TXD 0x0UL

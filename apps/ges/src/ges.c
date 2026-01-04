@@ -90,8 +90,8 @@ int main()
 		// 1. Sense : Acquire EGM signal from GI Model
 		int16_t new_sample = recv_from_gut();
 
-		/* START OF ET MEASUREMENT */
 		st = rdtime64();
+		/* start MEASUREMENT */
 
 		rb_push_sample(&sig_rb, new_sample);
 		sig_idx++;
@@ -222,19 +222,20 @@ int main()
 			// printf("Pacing signal sent to GUT.\n");
 		}
 
-		/* END OF ET MEASUREMENT */
+		/* END MEASUREMENT */
 		en = rdtime64();
-		int8_t value2 = !gpi_read_3();
-		if (value2 == 1)
-		{
-			// If KEY1 is pressed, print
+		send_et_cycle((int)state, en - st);
+		// int8_t value2 = !gpi_read_3();
+		// if (value2 == 1)
+		// {
+		// 	// If KEY1 is pressed, print
 
-			uint64_t et = en - st;
+		// 	uint64_t et = en - st;
 
-			printf("ST:%u %u\n", (uint32_t)(st >> 32), (uint32_t)st);
-			printf("EN:%u %u\n", (uint32_t)(en >> 32), (uint32_t)en);
-			printf("ET:%u %u\n", (uint32_t)(et >> 32), (uint32_t)et);
-		}
+		// 	printf("ST:%u %u\n", (uint32_t)(st >> 32), (uint32_t)st);
+		// 	printf("EN:%u %u\n", (uint32_t)(en >> 32), (uint32_t)en);
+		// 	printf("ET:%u %u\n", (uint32_t)(et >> 32), (uint32_t)et);
+		// }
 	}
 
 	return 0;
