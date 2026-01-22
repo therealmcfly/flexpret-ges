@@ -30,7 +30,12 @@ set(CMAKE_STRIP "${RISCV_TOOLCHAIN_ROOT}/${RISCV_TOOLCHAIN_PREFIX}strip")
 set(CMAKE_OBJDUMP "${RISCV_TOOLCHAIN_ROOT}/${RISCV_TOOLCHAIN_PREFIX}objdump")
 set(CMAKE_OBJCOPY "${RISCV_TOOLCHAIN_ROOT}/${RISCV_TOOLCHAIN_PREFIX}objcopy")
 
-set(RISCV_COMPILER_FLAGS "-g -Os -static -march=rv32i_zicsr -mabi=ilp32 -nostartfiles --specs=nosys.specs -ffunction-sections -fdata-sections -Wl,--gc-sections")
+# Original: -Os (optimized for size)
+# set(RISCV_COMPILER_FLAGS "-g -Os -static -march=rv32i_zicsr -mabi=ilp32 -nostartfiles --specs=nosys.specs -ffunction-sections -fdata-sections -Wl,--gc-sections")
+
+# Match Heptane static analysis: -O0 -fno-builtin -fno-inline
+set(RISCV_COMPILER_FLAGS "-g -O0 -fno-builtin -fno-inline -static -march=rv32i_zicsr -mabi=ilp32 -nostartfiles --specs=nosys.specs -ffunction-sections -fdata-sections -Wl,--gc-sections")
+
 set(RISCV_COMPILER_FLAGS_CXX)
 set(RISCV_COMPILER_FLAGS_DEBUG)
 set(RISCV_COMPILER_FLAGS_RELEASE)

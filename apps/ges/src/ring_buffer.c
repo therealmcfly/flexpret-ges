@@ -8,7 +8,7 @@
 #define IS_FULL_INIT_VAL 0
 
 // Initialize buffer
-void rb_init(RingBuffer *rb, int16_t *buffer, int16_t buffer_size)
+void rb_init(RingBuffer *rb, int *buffer, int buffer_size)
 {
 	if (rb == NULL)
 	{
@@ -25,7 +25,7 @@ void rb_init(RingBuffer *rb, int16_t *buffer, int16_t buffer_size)
 	// printf("Ring buffer initialized.\n");
 }
 
-int rb_push_sample(RingBuffer *rb, int16_t new_sample)
+int rb_push_sample(RingBuffer *rb, int new_sample)
 {
 	if (rb == NULL)
 	{
@@ -63,7 +63,7 @@ void rb_reset(RingBuffer *rb)
 	rb->new_signal_count = WRITE_COUNT_INIT_VAL;
 }
 
-int rb_snapshot(RingBuffer *rb, int16_t *snapshot_buffer, int16_t offset)
+int rb_snapshot(RingBuffer *rb, int *snapshot_buffer, int offset)
 {
 	if (rb == NULL || snapshot_buffer == NULL)
 	{
@@ -86,7 +86,7 @@ int rb_snapshot(RingBuffer *rb, int16_t *snapshot_buffer, int16_t offset)
 
 	// printf("Taking snapshot of ring buffer!\n");
 	// rtr_flag is reset outside this function after
-	int16_t *curr_ptr = rb->tail;
+	int *curr_ptr = rb->tail;
 	for (int i = 0; i < rb->size; i++)
 	{
 		snapshot_buffer[i] = *curr_ptr;
