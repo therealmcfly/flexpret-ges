@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <flexpret/io.h>
 
-#include "const.h"
+#include "global.h"
 #include "util.h"
 #include "comm.h"
 #include "ring_buffer.h"
@@ -24,10 +24,11 @@ int lowest_slope_sum = 0;
 int lowest_slope_count = 0;
 int detection_threshold = 0;
 
-// ETA measurement variables
-uint64_t st = 0;
-uint64_t en = 0;
-PmState et_state;
+// // ETA measurement variables
+// int st = 0;
+// int en = 0;
+// PmState et_state;
+int start_instret = 0;
 
 void reset_counter(int *interval_ms)
 {
@@ -114,8 +115,8 @@ int main()
 			return 1; // Return error
 		}
 
-		uint32_t start_instret = rdinstret();
-		st = rdtime64();
+		start_instret = rdinstret();
+		st = rdtime();
 		et_state = state;
 		/* start MEASUREMENT */
 
@@ -221,19 +222,21 @@ int main()
 		gri_counter += SAMPLING_INTERVAL_MS;
 		// 3. Actuate : Send stimulation signal based on pacing decision
 
-		/* END MEASUREMENT */
-		en = rdtime64();
-		uint32_t end_instret = rdinstret();
-		uint32_t instructions = end_instret - start_instret;
-		send_et_metrics((int)et_state, en - st, instructions);
+		// /* END MEASUREMENT */
+		// en = rdtime();
+		// uint32_t end_instret = rdinstret();
+		// uint32_t instructions = end_instret - start_instret;
+		// send_et_metrics((int)et_state, en - st, instructions);
 
-		int8_t value = !gpi_read_2();
+		send_to_gut(PACING);
 
-		if (state == PACING || value == 1)
-		{
-			send_to_gut(1);
-			// printf("Pacing signal sent to GUT.\n");
-		}
+		// int8_t value = !gpi_read_2();
+
+		// if (state == PACING || value == 1)
+		// {
+		// 	send_to_gut(1);
+		// 	// printf("Pacing signal sent to GUT.\n");
+		// }
 
 		// int8_t value2 = !gpi_read_3();
 		// if (value2 == 1)

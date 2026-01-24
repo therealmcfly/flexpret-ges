@@ -1,9 +1,17 @@
 #include "comm.h"
 #include <flexpret/uart.h>
 #include <util.h>
+#include <flexpret/time.h>
+#include <flexpret/csrs.h>
+#include "global.h"
 
 #define SYNC0 0xAA
 #define SYNC1 0x55
+
+// ETA measurement variables
+int st = 0;
+int en = 0;
+PmState et_state;
 
 int recv_from_gut()
 {
@@ -26,10 +34,24 @@ int recv_from_gut()
 
 void send_to_gut(int value)
 {
-	uart_send(UART1_BASE, value);
+	if (value == PACING)
+	{
+		/* END MEASUREMENT */
+		en = rdtime();
+		int end_instret = rdinstret();
+		int instructions = end_instret - start_instret;
+		send_et_metrics((int)et_state, en - st, instructions);
+		uart_send(UART1_BASE, value);
+		return;
+	}
+	/* END MEASUREMENT */
+	en = rdtime();
+	int end_instret = rdinstret();
+	int instructions = end_instret - start_instret;
+	send_et_metrics((int)et_state, en - st, instructions);
 }
 
-void send_et_metrics(int state, uint32_t et_ns, uint32_t instructions)
+void send_et_metrics(int state, int et_ns, int instructions)
 {
 	// sync header
 	uart_send(UART2_BASE, SYNC0);

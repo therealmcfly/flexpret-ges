@@ -19,10 +19,17 @@ typedef enum
 	PACING = 3		 // Pacing state
 } PmState;
 
-const char *PmStateNames[] = {
+__attribute__((unused)) static const char *PmStateNames[] = {
 		"LEARNING",
 		"DETECTING",
 		"IGNORING",
 		"PACING"};
+
+// ETA measurement variables
+extern PmState state;
+extern int st;
+extern int en;
+extern PmState et_state;
+extern int start_instret;
 
 #endif // GLOBAL_H
