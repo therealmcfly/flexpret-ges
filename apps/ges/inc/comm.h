@@ -2,10 +2,11 @@
 #define COMM_H
 
 #include <stdint.h>
+#include "global.h"
 
 int recv_from_gut();
 
-void send_to_gut(int value);
+void send_to_gut(PmState value);
 
 void send_et_metrics(int state, int et_ns, int instructions);
 

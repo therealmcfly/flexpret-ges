@@ -1,13 +1,11 @@
 #include "comm.h"
 #include <flexpret/uart.h>
 #include <util.h>
-#include <flexpret/time.h>
-#include <flexpret/csrs.h>
 
 #define SYNC0 0xAA
 #define SYNC1 0x55
 
-int recv_from_gut()
+int16_t recv_from_gut()
 {
 	uint8_t lo = uart_receive(UART1_BASE);
 	uint8_t hi = uart_receive(UART1_BASE);
@@ -23,39 +21,39 @@ int recv_from_gut()
 	// print the value
 	// printf("Pulse value: %d\n", value);
 
-	return (int)value;
+	return value;
 }
 
-void send_to_gut(PmState state)
+void send_to_gut(int16_t value)
 {
-	if (state == PACING)
-	{
-		/* END MEASUREMENT */
-		en = rdtime();
-		int end_instret = rdinstret();
-		int instructions = end_instret - start_instret;
-		send_et_metrics((int)et_state, en - st, instructions);
-		uart_send(UART1_BASE, 1);
-		return;
-	}
-	/* END MEASUREMENT */
-	en = rdtime();
-	int end_instret = rdinstret();
-	int instructions = end_instret - start_instret;
-	send_et_metrics((int)et_state, en - st, instructions);
+	uart_send(UART1_BASE, value);
 }
 
-void send_et_metrics(int state, int et_ns, int instructions)
+void send_et_cycle(int state, uint64_t et_cycle)
 {
 	// sync header
 	uart_send(UART2_BASE, SYNC0);
 	uart_send(UART2_BASE, SYNC1);
 	// Send state as 1 byte
 	uart_send(UART2_BASE, (uint8_t)(state & 0xFF));
-	// Send et_ns as 4 bytes (little-endian)
-	for (int i = 0; i < 4; i++)
+	// Send et_cycle as 8 bytes (little-endian)
+	for (int i = 0; i < 8; i++)
 	{
-		uart_send(UART2_BASE, (uint8_t)((et_ns >> (i * 8)) & 0xFF));
+		uart_send(UART2_BASE, (uint8_t)((et_cycle >> (i * 8)) & 0xFF));
+	}
+}
+
+void send_et_metrics(int state, uint64_t et_cycle, uint32_t instructions)
+{
+	// sync header
+	uart_send(UART2_BASE, SYNC0);
+	uart_send(UART2_BASE, SYNC1);
+	// Send state as 1 byte
+	uart_send(UART2_BASE, (uint8_t)(state & 0xFF));
+	// Send et_cycle as 8 bytes (little-endian)
+	for (int i = 0; i < 8; i++)
+	{
+		uart_send(UART2_BASE, (uint8_t)((et_cycle >> (i * 8)) & 0xFF));
 	}
 	// Send instructions as 4 bytes (little-endian)
 	for (int i = 0; i < 4; i++)
