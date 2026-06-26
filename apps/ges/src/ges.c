@@ -32,6 +32,7 @@ int st = 0;
 int en = 0;
 PmState et_state;
 int start_instret = 0;
+int start_cycle = 0;
 
 void detect_activation(int16_t lowest_slope)
 {
@@ -116,6 +117,7 @@ int main()
 		// 2.1.1 : Take snapshot of ring buffer
 
 		start_instret = rdinstret();
+		start_cycle = rdcycle();
 		st = rdtime();
 		et_state = state;
 		/* start MEASUREMENT */
@@ -162,12 +164,15 @@ int main()
 				// calculate and set detection threshold
 				// detection_threshold = (int16_t)(lowest_slope_sum / lowest_slope_count) * 4.5; // %%%%%% why 4.5?
 				// detection_threshold = (int16_t)(lowest_slope_sum / lowest_slope_count);
-				detection_threshold = lowest_slope_sum >> 13; // divide by 8192
+				detection_threshold = lowest_slope_sum >> 13;		// divide by 8192
+				detection_threshold = detection_threshold << 2; // scalor : multiply by 4
+
+				// detection_threshold = lowest_slope_sum >> 11; // divide by 8192 then multiply by 4 (net: >> 13 << 2 = >> 11)
 
 				// reset LRI counter and set state to DETECTING
 				lri_timer = 0;
 				state = DETECTING;
-				printf("DT : %d\n", detection_threshold);
+				// printf("DT : %d\n", detection_threshold);
 			}
 			break;
 
@@ -247,8 +252,10 @@ int main()
 		// /* END MEASUREMENT */
 		// en = rdtime();
 		// uint32_t end_instret = rdinstret();
+		// uint32_t end_cycle = rdcycle();
 		// uint32_t instructions = end_instret - start_instret;
-		// send_et_metrics((int)et_state, en - st, instructions);
+		// uint32_t cycles = end_cycle - start_cycle;
+		// send_et_metrics((int)et_state, en - st, cycles, instructions);
 
 		send_to_gut(state);
 

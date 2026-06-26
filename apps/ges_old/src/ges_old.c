@@ -113,6 +113,7 @@ int main()
 		}
 
 		uint32_t start_instret = rdinstret();
+		uint32_t start_cycle = rdcycle();
 		st = rdtime64();
 		et_state = state;
 		/* start MEASUREMENT */
@@ -225,8 +226,10 @@ int main()
 		/* END MEASUREMENT */
 		en = rdtime64();
 		uint32_t end_instret = rdinstret();
+		uint32_t end_cycle = rdcycle();
 		uint32_t instructions = end_instret - start_instret;
-		send_et_metrics((int)et_state, en - st, instructions);
+		uint32_t cycles = end_cycle - start_cycle;
+		send_et_metrics((int)et_state, en - st, cycles, instructions);
 
 		int8_t value = !gpi_read_2();
 

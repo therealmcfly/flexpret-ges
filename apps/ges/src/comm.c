@@ -31,21 +31,25 @@ void send_to_gut(PmState state)
 	if (state == PACING)
 	{
 		/* END MEASUREMENT */
+		int end_cycle = rdcycle();
 		en = rdtime();
 		int end_instret = rdinstret();
 		int instructions = end_instret - start_instret;
-		send_et_metrics((int)et_state, en - st, instructions);
+		int cycles = end_cycle - start_cycle;
+		send_et_metrics((int)et_state, en - st, cycles, instructions);
 		uart_send(UART1_BASE, 1);
 		return;
 	}
 	/* END MEASUREMENT */
 	en = rdtime();
 	int end_instret = rdinstret();
+	int end_cycle = rdcycle();
 	int instructions = end_instret - start_instret;
-	send_et_metrics((int)et_state, en - st, instructions);
+	int cycles = end_cycle - start_cycle;
+	send_et_metrics((int)et_state, en - st, cycles, instructions);
 }
 
-void send_et_metrics(int state, int et_ns, int instructions)
+void send_et_metrics(int state, int et_ns, int cycles, int instructions)
 {
 	// sync header
 	uart_send(UART2_BASE, SYNC0);
@@ -56,6 +60,11 @@ void send_et_metrics(int state, int et_ns, int instructions)
 	for (int i = 0; i < 4; i++)
 	{
 		uart_send(UART2_BASE, (uint8_t)((et_ns >> (i * 8)) & 0xFF));
+	}
+	// Send cycles as 4 bytes (little-endian)
+	for (int i = 0; i < 4; i++)
+	{
+		uart_send(UART2_BASE, (uint8_t)((cycles >> (i * 8)) & 0xFF));
 	}
 	// Send instructions as 4 bytes (little-endian)
 	for (int i = 0; i < 4; i++)

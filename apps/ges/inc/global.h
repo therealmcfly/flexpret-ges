@@ -31,5 +31,6 @@ extern int st;
 extern int en;
 extern PmState et_state;
 extern int start_instret;
+extern int start_cycle;
 
 #endif // GLOBAL_H

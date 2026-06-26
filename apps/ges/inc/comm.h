@@ -8,6 +8,6 @@ int recv_from_gut();
 
 void send_to_gut(PmState value);
 
-void send_et_metrics(int state, int et_ns, int instructions);
+void send_et_metrics(int state, int et_ns, int cycles, int instructions);
 
 #endif // COMM_H

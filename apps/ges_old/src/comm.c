@@ -43,7 +43,7 @@ void send_et_cycle(int state, uint64_t et_cycle)
 	}
 }
 
-void send_et_metrics(int state, uint64_t et_cycle, uint32_t instructions)
+void send_et_metrics(int state, uint64_t et_cycle, uint32_t cycles, uint32_t instructions)
 {
 	// sync header
 	uart_send(UART2_BASE, SYNC0);
@@ -54,6 +54,11 @@ void send_et_metrics(int state, uint64_t et_cycle, uint32_t instructions)
 	for (int i = 0; i < 8; i++)
 	{
 		uart_send(UART2_BASE, (uint8_t)((et_cycle >> (i * 8)) & 0xFF));
+	}
+	// Send cycles as 4 bytes (little-endian)
+	for (int i = 0; i < 4; i++)
+	{
+		uart_send(UART2_BASE, (uint8_t)((cycles >> (i * 8)) & 0xFF));
 	}
 	// Send instructions as 4 bytes (little-endian)
 	for (int i = 0; i < 4; i++)
