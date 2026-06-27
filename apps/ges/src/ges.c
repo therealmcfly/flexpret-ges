@@ -34,6 +34,12 @@ PmState et_state;
 int start_instret = 0;
 int start_cycle = 0;
 
+void transtion_to_state(PmState new_state)
+{
+	state = new_state;
+	// printf("%d\n", state);
+}
+
 void detect_activation(int16_t lowest_slope)
 {
 	if (lowest_slope < detection_threshold)
@@ -92,7 +98,8 @@ int main()
 		}
 	}
 
-	state = LEARNING;
+	// state = LEARNING;
+	transtion_to_state(LEARNING);
 	int read_idx;
 
 	while (sig_buffer_full)
@@ -171,8 +178,9 @@ int main()
 
 				// reset LRI counter and set state to DETECTING
 				lri_timer = 0;
-				state = DETECTING;
-				// printf("DT : %d\n", detection_threshold);
+				// state = DETECTING;
+				transtion_to_state(DETECTING);
+				printf("DT : %d\n", detection_threshold);
 			}
 			break;
 
@@ -192,13 +200,15 @@ int main()
 					// reset GRI and LRI and set state to IGNORING
 					lri_timer = 0;
 					gri_timer = 0;
-					state = IGNORING;
+					// state = IGNORING;
+					transtion_to_state(IGNORING);
 				}
 			}
 			else
 			{
 				// Transition 3 : DETECTING -> PACING
-				state = PACING;
+				// state = PACING;
+				transtion_to_state(PACING);
 			}
 
 			break;
@@ -213,7 +223,8 @@ int main()
 			else
 			{
 				// Transition 1 : IGNORING -> DETECTING
-				state = DETECTING;
+				// state = DETECTING;
+				transtion_to_state(DETECTING);
 			}
 			break;
 
@@ -233,7 +244,8 @@ int main()
 				// reset GRI and LRI and set state to IGNORING
 				lri_timer = 0;
 				gri_timer = 0;
-				state = IGNORING;
+				// state = IGNORING;
+				transtion_to_state(IGNORING);
 			}
 			break;
 
