@@ -51,6 +51,27 @@ Z:/home/eugene/gastric-pacemaker/fp-ges/build/fpga/de1-soc/fp-bootloader/de1soc_
 
 When programming completes, the FPGA is loaded with the FlexPRET bootloader.
 
+### Reprogram FlexPRET Without Rebuilding or Synthesizing
+
+If the DE1-SoC has been power-cycled and the FPGA source has not changed, do
+not rerun the full Mega task. Open Quartus Programmer directly from WSL:
+
+```bash
+/mnt/c/intelFPGA/18.1/quartus/bin64/quartus_pgmw.exe
+```
+
+In Quartus Programmer, select the DE1-SoC USB-Blaster hardware and add the
+existing synthesized image:
+
+```text
+Z:/home/eugene/gastric-pacemaker/fp-ges/build/fpga/de1-soc/fp-bootloader/de1soc_bootloader.sof
+```
+
+Check `Program/Configure`, then click `Start`. Rerun
+`Mega: Build and Synthesize Bootloader FPGA` only after changing the FPGA or
+bootloader source. Pressing `KEY3` resets FlexPRET but does not erase the FPGA
+configuration, so it does not require reprogramming or synthesis.
+
 ## 2. Build GES
 
 From the repository root:
