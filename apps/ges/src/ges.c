@@ -37,7 +37,7 @@ int start_cycle = 0;
 void transtion_to_state(PmState new_state)
 {
 	state = new_state;
-	// printf("%d\n", state);
+	printf("%d\n", state);
 }
 
 void detect_activation(int16_t lowest_slope)
@@ -45,7 +45,7 @@ void detect_activation(int16_t lowest_slope)
 	if (lowest_slope < detection_threshold)
 	{
 		activation_flag = 1;
-		// printf("Activation detected! Lowest slope: %d / Threshold: %d\n", lowest_slope, detection_threshold);
+		printf("Act Detect! : %d / Thresh: %d\n", lowest_slope, detection_threshold);
 	}
 	else
 	{
@@ -214,7 +214,7 @@ int main()
 			break;
 
 		case IGNORING:
-			detect_activation(lowest_slope);
+			// detect_activation(lowest_slope);
 
 			if (gri_timer <= GRI_THRESHOLD_MS)
 			{
