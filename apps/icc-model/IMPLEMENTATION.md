@@ -52,7 +52,7 @@ typedef int32_t IccVoltageNv;
 Examples:
 
 ```text
--0.004494 mV  -> -4494 nV
+-0.004401 mV  -> -4494 nV
 -67.633600 mV -> -67633600 nV
 ```
 
@@ -139,12 +139,12 @@ Resting increments are selected from a lookup table:
 
 | Pacemaker interval | Integer increment | Millivolts per step |
 |---:|---:|---:|
-| 15 s | `-30479 nV` | -0.030479 mV |
-| 20 s | `-13996 nV` | -0.013996 mV |
+| 15 s | `-32003 nV` | -0.032003 mV |
+| 20 s | `-14307 nV` | -0.014307 mV |
 | 23 s | `-10593 nV` | -0.010593 mV |
-| 26 s | `-8967 nV` | -0.008967 mV |
-| 30 s | `-6800 nV` | -0.006800 mV |
-| 40 s | `-4494 nV` | -0.004494 mV |
+| 26 s | `-8489 nV` | -0.008489 mV |
+| 30 s | `-6728 nV` | -0.006728 mV |
+| 40 s | `-4401 nV` | -0.004401 mV |
 | 0 or -1 | `0 nV` | Follower or blocked cell |
 
 The target state update performs no floating-point operation, slope

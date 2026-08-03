@@ -19,17 +19,17 @@ static IccVoltageNv resting_increment_nv(int8_t interval_s)
 {
     switch (interval_s) {
     case 15:
-        return -30479;
+        return -32003;
     case 20:
-        return -13996;
+        return -14307;
     case 23:
         return -10593;
     case 26:
-        return -8967;
+        return -8489;
     case 30:
-        return -6800;
+        return -6728;
     case 40:
-        return -4494;
+        return -4401;
     case -1: /* Blocked cell. */
     case 0:  /* Follower cell. */
     default:
