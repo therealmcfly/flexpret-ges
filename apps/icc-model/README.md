@@ -168,8 +168,19 @@ baud, and opens `picocom`. The model continuously prints CSV rows beginning
 with this header:
 
 ```text
-sample,time_ms,state,voltage_nv,nearest_uv
+sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,state,voltage_nv,nearest_uv
 ```
+
+The timing fields are captured immediately after `fp_delay_until()` returns
+and before `icc_step()` runs:
+
+- `fpga_time_ns` is the low 32 bits of FlexPRET's hardware time counter;
+- `period_ns` is the measured difference between consecutive iteration starts;
+- `release_lateness_ns` is the difference between the actual and scheduled
+  iteration start.
+
+The 32-bit `fpga_time_ns` value wraps approximately every 4.295 seconds.
+Unsigned subtraction keeps `period_ns` valid across that wrap.
 
 To exit `picocom`, press `Ctrl+A`, release the keys, then press `Ctrl+X`.
 
