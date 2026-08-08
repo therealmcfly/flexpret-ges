@@ -6,76 +6,69 @@ This campaign tests the five-cell ICC model at biological timesteps of 200,
 100, 50, 20, and 10 ms. The maximum permitted timestep is 200 ms. Every tested
 timestep divides the calibrated 200 ms base step exactly.
 
-The production configuration remains 200 ms. Smaller timesteps are currently
-experimental because their per-step nanovolt increments are obtained by signed
-integer scaling and round-to-nearest from the calibrated 200 ms increments.
+The production configuration remains 200 ms. Smaller timesteps remain
+experimental, but their Q0 resting increments are now selected from an
+exhaustively searched calibration table rather than obtained by directly
+scaling the 200 ms resting increments.
 
-## Integer scaling method
+## Integer calibration method
 
-For a calibrated 200 ms voltage increment `increment_200`, the experimental
-increment is computed at compile time as:
+For each supported timestep and pacemaker interval, an offline exhaustive
+search executes the real ICC state machine with candidate constant integer Q0
+increments. It selects the value with the minimum absolute Q1-to-Q1 period
+error. When candidates tie, a period that does not activate early is preferred,
+followed by the value closest to the mathematically scaled 200 ms increment.
 
-```text
-increment_dt = round(increment_200 * timestep_ms / 200)
-```
-
-The target executes only integer additions. No floating-point operation is
-introduced. However, rounding every small step independently can accumulate a
-different total voltage change and can move a threshold crossing to a different
-sample. Timestep sensitivity must therefore be measured rather than assumed.
+The selected values are compiled into `inc/icc_calibration.h`. Runtime
+execution remains a single integer addition and introduces no floating-point
+operation or additional cell state.
 
 ## Intrinsic frequency accuracy
 
-The following table gives the measured Q1-to-Q1 period in milliseconds. The
-configured periods correspond to 4.000, 3.000, 2.609, 2.308, 2.000, and 1.500
-cpm respectively.
+The following table gives the measured Q1-to-Q1 period in milliseconds:
 
 | Timestep | 15 s target | 20 s target | 23 s target | 26 s target | 30 s target | 40 s target |
-|---:|---:|---:|---:|---:|---:|---:|---:|
+|---:|---:|---:|---:|---:|---:|---:|
 | 200 ms | 15000 | 20000 | 23000 | 26000 | 30000 | 40000 |
-| 100 ms | 14900 | 19800 | 22900 | 25900 | 29800 | 39800 |
-| 50 ms | 14850 | 19750 | 22850 | 25800 | 29700 | 39700 |
-| 20 ms | 14780 | 19660 | 22780 | 25740 | 29640 | 39620 |
-| 10 ms | 14790 | 19740 | 22870 | 25890 | 29840 | 39890 |
+| 100 ms | 15000 | 20000 | 23000 | 26000 | 30000 | 40000 |
+| 50 ms | 15000 | 20000 | 23000 | 26000 | 30000 | 40000 |
+| 20 ms | 15000 | 20000 | 23000 | 26000 | 30000 | 40020 |
+| 10 ms | 15000 | 20000 | 23010 | 25990 | 30010 | 40020 |
 
 | Timestep | Maximum absolute period error | Maximum relative error |
 |---:|---:|---:|
 | 200 ms | 0 ms | 0% |
-| 100 ms | 200 ms | 1.00% |
-| 50 ms | 300 ms | 1.25% |
-| 20 ms | 380 ms | 1.70% |
-| 10 ms | 260 ms | 1.40% |
+| 100 ms | 0 ms | 0% |
+| 50 ms | 0 ms | 0% |
+| 20 ms | 20 ms | 0.05% |
+| 10 ms | 20 ms | 0.05% |
 
-The error is not monotonic with timestep because voltage increments and state
-threshold crossings are both quantized. A smaller timestep does not
-automatically provide a more accurate configured cpm when each step uses one
-rounded integer increment.
+The complete host ICC/path/network suite passed at all five timesteps. A
+25-case all-equal Verilator matrix additionally confirmed the 20-, 23-, 26-,
+30-, and 40-second measurements at every timestep. Every Q1 event in those
+all-equal cases was intrinsic; simultaneous wavefronts were annihilated.
 
-The 10 ms values were additionally confirmed directly in Verilator using five
-all-equal networks. Because every cell had the same intrinsic period, all paths
-annihilated simultaneous wavefronts and no path-induced Q1 event occurred:
+At 10 ms, the directly confirmed Verilator results were:
 
 | Configured period | Verilator Q1-to-Q1 period | Error | Measured frequency |
 |---:|---:|---:|---:|
-| 20 s | 19740 ms | -260 ms | 3.039514 cpm |
-| 23 s | 22870 ms | -130 ms | 2.623524 cpm |
-| 26 s | 25890 ms | -110 ms | 2.317497 cpm |
-| 30 s | 29840 ms | -160 ms | 2.010724 cpm |
-| 40 s | 39890 ms | -110 ms | 1.504136 cpm |
+| 20 s | 20000 ms | 0 ms | 3.000000 cpm |
+| 23 s | 23010 ms | +10 ms | 2.607562 cpm |
+| 26 s | 25990 ms | -10 ms | 2.308580 cpm |
+| 30 s | 30010 ms | +10 ms | 1.999334 cpm |
+| 40 s | 40020 ms | +20 ms | 1.499250 cpm |
 
-Across these five runs, all 120 recorded Q1 events were intrinsic and none were
-path induced. The discrepancy is therefore produced by timestep quantization,
-not network entrainment.
-
-An offline search was also performed for a constant integer resting increment
-that would restore the exact configured period. Exact constants were available
-for many timestep/frequency combinations, but not for all. In particular, no
-constant nanovolt-per-step value produced the exact period for the 40-second
-cell at 20 ms, or for the 23-, 26-, 30-, and 40-second cells at 10 ms under the
-current state equations. A lookup table alone therefore cannot make every
-tested timestep exact.
+A single constant integer increment cannot produce every exact period under the
+current threshold equations. No exact value exists for the 40-second cell at
+20 ms, or for the 23-, 26-, 30-, and 40-second cells at 10 ms. The selected
+lookup values reduce the worst observed error from 380 ms to 20 ms.
 
 ## Network scenario matrix
+
+> Note: the 100-case dominance matrix below was recorded before the new
+> timestep-specific Q0 calibration table. Its principal path conclusions remain
+> useful, but close 4- and 5-second competition boundaries have not yet been
+> rerun with the new lookup values.
 
 One hundred Verilator cases were run. Each case represented 120 seconds of
 biological time. The matrix contained:
@@ -111,9 +104,8 @@ arrived.
 
 Some boundary details changed. With the fastest cell at an end and a 4-second
 delay, the 200 ms model reported three intrinsic sites, while the smaller-step
-models reported four. This is consistent with their slightly shortened rounded
-intrinsic periods and demonstrates that numerical timestep error can affect
-which cell wins a close propagation-versus-intrinsic timing race.
+models reported four. These results came from the earlier direct-scaling
+implementation and have not been rerun with the calibrated lookup.
 
 ## Path-delay accuracy
 
@@ -143,12 +135,12 @@ and maximum release lateness.
 | 10 ms | 10000000 ns | 10000000 ns | 10000160 ns | 160 ns |
 
 The five-cell workload met every tested deadline down to 10 ms in Verilator.
-This demonstrates computational feasibility for this network size, but it does
-not correct the cpm drift caused by rounded voltage increments.
+This demonstrates computational feasibility for this network size. Scheduler
+timing is independent of the separately calibrated Q0 period accuracy.
 
 ## Conclusion
 
-The 200 ms configuration remains the only tested mode that simultaneously
+The 200 ms configuration remains the production mode and simultaneously
 provides:
 
 - exact configured intrinsic periods;
@@ -157,8 +149,7 @@ provides:
 - hard real-time scheduling with 160 ns maximum release lateness in Verilator.
 
 Smaller timesteps are computationally feasible and retain exact path timing,
-but the simple constant-increment representation introduces up to 1.70% cpm
-error and can change close pacemaker-competition boundaries. If exact cpm is
-required below 200 ms, the next design decision is between a fractional
-remainder accumulator and a different time-based phase representation. The
+but the timestep-specific calibration limits the measured intrinsic-period
+error to 20 ms. If exact cpm is required below 200 ms, the next
+design decision is between a fractional remainder accumulator and a different time-based phase representation. The
 smaller-timestep modes should remain experimental until that choice is made.

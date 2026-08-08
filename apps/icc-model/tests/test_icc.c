@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "icc.h"
+#include "icc_calibration.h"
 #include "network.h"
 #include "path.h"
 
@@ -27,12 +28,12 @@ static void test_initial_wait_and_first_upstroke(void)
     (void)icc_step(&cell);
     assert(cell.state == ICC_Q0_RESTING);
     assert(cell.voltage_nv ==
-           -67633600 + scale_200ms_increment(-14307));
+           -67633600 + ICC_RESTING_20S_NV);
 
     (void)icc_step(&cell);
     assert(cell.state == ICC_Q1_UPSTROKE);
     assert(cell.voltage_nv ==
-           -67633600 + scale_200ms_increment(-14307) +
+           -67633600 + ICC_RESTING_20S_NV +
            scale_200ms_increment(8704960));
 }
 
@@ -127,6 +128,19 @@ static int next_q1_sample(Icc *cell, int after_sample)
 static void test_exact_pacemaker_intervals(void)
 {
     static const int intervals_s[] = {15, 20, 23, 26, 30, 40};
+#if ICC_TIMESTEP_MS == 20U
+    static const int expected_periods_ms[] = {
+        15000, 20000, 23000, 26000, 30000, 40020
+    };
+#elif ICC_TIMESTEP_MS == 10U
+    static const int expected_periods_ms[] = {
+        15000, 20000, 23010, 25990, 30010, 40020
+    };
+#else
+    static const int expected_periods_ms[] = {
+        15000, 20000, 23000, 26000, 30000, 40000
+    };
+#endif
 
     for (size_t i = 0; i < sizeof(intervals_s) / sizeof(intervals_s[0]); ++i) {
         Icc cell;
@@ -135,18 +149,8 @@ static void test_exact_pacemaker_intervals(void)
         int first_q1 = next_q1_sample(&cell, 0);
         int second_q1 = next_q1_sample(&cell, first_q1);
         int elapsed_ms = (second_q1 - first_q1) * (int)ICC_TIMESTEP_MS;
-        int expected_ms = intervals_s[i] * 1000;
-        int error_ms = elapsed_ms - expected_ms;
 
-        if (error_ms < 0) {
-            error_ms = -error_ms;
-        }
-#if ICC_TIMESTEP_MS == 200U
-        assert(error_ms == 0);
-#else
-        /* Rounded experimental increments must remain within 2% of target. */
-        assert((int64_t)error_ms * 100 <= (int64_t)expected_ms * 2);
-#endif
+        assert(elapsed_ms == expected_periods_ms[i]);
     }
 }
 

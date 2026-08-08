@@ -139,7 +139,8 @@ The source increments were calibrated for the production 200 ms model period:
 | Q2 | `-181952 nV` | -0.181952 mV |
 | Q3 | `-1727227 nV` | -1.727227 mV |
 
-Resting increments are selected from a lookup table:
+Resting increments are selected from the timestep-specific lookup table in
+`inc/icc_calibration.h`. The production 200 ms values are:
 
 | Pacemaker interval | Integer increment | Millivolts per step |
 |---:|---:|---:|
@@ -151,17 +152,13 @@ Resting increments are selected from a lookup table:
 | 40 s | `-4401 nV` | -0.004401 mV |
 | 0 or -1 | `0 nV` | No intrinsic activity or blocked cell |
 
-For experimental timesteps below 200 ms, each calibrated increment is scaled at
-compile time using signed integer round-to-nearest arithmetic:
+For 100, 50, 20, and 10 ms, an exhaustive search selects the constant integer
+Q0 increment that minimizes absolute Q1-to-Q1 period error. The runtime state
+update remains a single integer addition. All target periods are exact at 100
+and 50 ms; the maximum residual error at 20 and 10 ms is 20 ms. The measured
+values and search limitations are reported in
+[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md).
 
-```text
-increment_dt = round(increment_200 * timestep_ms / 200)
-```
-
-The runtime state update remains an integer addition. Timestep sensitivity is
-not numerically neutral, however: independent rounding can shift voltage
-threshold crossings and configured cpm. The measured errors and limitations are
-reported in [TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md).
 
 The target state update performs no floating-point operation, slope
 multiplication, division, or square root. The diagnostic nearest-microvolt
@@ -365,6 +362,6 @@ separately from the integer ICC and path state machines.
 
 The 200 ms timestep is the validated numerical mode. Experimental smaller
 timesteps meet the five-cell Verilator deadlines and preserve exact integer path
-delays, but rounded nanovolt increments introduce up to 1.70% intrinsic-period
-error. Exact smaller-timestep cpm requires a future numerical design decision,
+delays, but timestep-specific Q0 calibration limits measured intrinsic-period
+error to 20 ms. Exact smaller-timestep cpm would require additional state,
 such as fractional remainder accumulation or explicit time-based phase logic.

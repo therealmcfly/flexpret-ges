@@ -271,9 +271,10 @@ Examples:
 
 The nanovolt is the storage unit, so runtime voltage addition and comparison
 use signed integers. The source increments are calibrated for the production
-200 ms timestep. Experimental smaller-step increments are scaled at compile
-time using integer constant expressions. The runtime update contains no
-floating-point values, multiplication, division, or square-root operations.
+200 ms timestep. Experimental smaller-step Q0 increments use a calibrated
+compile-time lookup table. Q1-Q3 increments remain integer-scaled. The runtime
+update contains no floating-point values, multiplication, division, or
+square-root operations.
 Diagnostic conversion to nearest whole microvolts uses integer division only
 for CSV output.
 
@@ -353,7 +354,7 @@ cells. Update the five-cell expectations in `tests/test_icc.c` as well.
 The defaults in `inc/path.h` do not override these arrays. The autonomous
 network passes every delay and gap explicitly from `src/main.c`. Adding a new
 pacemaker interval outside the supported list also requires adding its
-precomputed integer resting increment and validation case in `src/icc.c`.
+calibrated resting increments in `inc/icc_calibration.h` and a validation case.
 
 ## Experimental Timestep Selection
 
@@ -367,13 +368,13 @@ cmake -S . -B build-emu-100ms \
 cmake --build build-emu-100ms --target icc-model
 ```
 
-`ICC_MODEL_TIMESTEP_MS` must be no greater than 200 and must divide 200 exactly.
-The tested values are 200, 100, 50, 20, and 10 ms. The compile-time scaling uses
-integer arithmetic and introduces no floating point.
+`ICC_MODEL_TIMESTEP_MS` must be no greater than 200 and must divide 200
+exactly. The tested values are 200, 100, 50, 20, and 10 ms. The Q0 calibration
+lookup and Q1-Q3 scaling use integer arithmetic and introduce no floating point.
 
-Only the 200 ms calibration currently reproduces every configured intrinsic
-cpm exactly. Smaller timesteps produced up to 1.70% period error because each
-small voltage increment is independently rounded to an integer nanovolt. They
+At 200, 100, and 50 ms, the calibration reproduces every configured intrinsic
+cpm exactly. The maximum measured error at 20 and 10 ms is 20 ms because
+some target periods have no exact constant integer Q0 increment. Smaller modes
 remain experimental; see
 [TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md) before using them in a
 physiological result.

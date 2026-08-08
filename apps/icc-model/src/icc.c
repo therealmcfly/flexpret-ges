@@ -1,4 +1,5 @@
 #include "icc.h"
+#include "icc_calibration.h"
 
 #include <stddef.h>
 
@@ -26,27 +27,6 @@ static const IccVoltageNv kQ2IncrementNv =
 static const IccVoltageNv kQ3IncrementNv =
     ICC_SCALE_200MS_INCREMENT(-1727227);
 
-static IccVoltageNv resting_increment_nv(int8_t interval_s)
-{
-    switch (interval_s) {
-    case 15:
-        return ICC_SCALE_200MS_INCREMENT(-32003);
-    case 20:
-        return ICC_SCALE_200MS_INCREMENT(-14307);
-    case 23:
-        return ICC_SCALE_200MS_INCREMENT(-10593);
-    case 26:
-        return ICC_SCALE_200MS_INCREMENT(-8489);
-    case 30:
-        return ICC_SCALE_200MS_INCREMENT(-6728);
-    case 40:
-        return ICC_SCALE_200MS_INCREMENT(-4401);
-    case -1: /* Blocked cell. */
-    case 0:  /* Follower cell. */
-    default:
-        return 0;
-    }
-}
 
 bool icc_interval_is_supported(int8_t interval_s)
 {
@@ -131,7 +111,8 @@ IccVoltageNv icc_step(Icc *cell)
 
     switch (cell->state) {
     case ICC_Q0_RESTING:
-        cell->voltage_nv += resting_increment_nv(cell->pacemaker_interval_s);
+        cell->voltage_nv += icc_calibrated_resting_increment_nv(
+            cell->pacemaker_interval_s);
         break;
 
     case ICC_Q1_UPSTROKE:

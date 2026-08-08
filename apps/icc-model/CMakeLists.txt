@@ -25,7 +25,13 @@ set(ICC_VERILATOR_TEST_SAMPLES "1000" CACHE STRING
 set(ICC_VERILATOR_TEST_PERIOD_NS "100000" CACHE STRING
   "Accelerated hardware scheduling period for emulator scenario tests")
 set(ICC_MODEL_TIMESTEP_MS "200" CACHE STRING
-  "Biological ICC model timestep in milliseconds (must divide 200)")
+  "Biological ICC model timestep in milliseconds")
+set_property(CACHE ICC_MODEL_TIMESTEP_MS PROPERTY STRINGS 200 100 50 20 10)
+set(ICC_MODEL_SUPPORTED_TIMESTEPS 200 100 50 20 10)
+if (NOT ICC_MODEL_TIMESTEP_MS IN_LIST ICC_MODEL_SUPPORTED_TIMESTEPS)
+  message(FATAL_ERROR
+    "ICC_MODEL_TIMESTEP_MS must be one of: 200, 100, 50, 20, 10")
+endif()
 
 if (NOT "${TARGET}" STREQUAL "fpga" AND NOT "${TARGET}" STREQUAL "emulator")
   message(FATAL_ERROR "TARGET must be either 'fpga' or 'emulator'")
