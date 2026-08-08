@@ -1,12 +1,18 @@
 # ICC Model on FlexPRET FPGA
 
-This app runs a single ICC cell on FlexPRET on the DE1-SoC FPGA. The FlexPRET
-bootloader is programmed onto the FPGA first, then the ICC application is sent
+This app runs a one-dimensional network of five ICC cells connected by four
+integer-timed bidirectional paths on FlexPRET on the DE1-SoC FPGA. The five
+cell intervals and four path delays and gaps are compiled into the application.
+The FlexPRET bootloader is programmed onto the FPGA first, then the app is sent
 to instruction scratchpad memory over UART.
 
-This is Step 1 of the ICC implementation. It deliberately does not yet contain
-paths, EGM calculation, controller packets, or GES communication. The detailed
-design rationale is in [IMPLEMENTATION.md](IMPLEMENTATION.md).
+This stage includes the ICC, path, and 1D network models but deliberately does
+not yet contain controller integration, EGM calculation, or GES communication.
+Design details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The 40-case
+pacemaker-location and path-delay campaign is reported in
+[VERILATOR_TEST_RESULTS.md](VERILATOR_TEST_RESULTS.md). Timestep sensitivity
+from 200 ms down to 10 ms is reported in
+[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md).
 
 ## How FPGA Loading Works
 
@@ -164,25 +170,13 @@ sudo chmod 666 /dev/ttyUSB0
 ```
 
 The launcher serializes `build-fpga/icc-model.mem`, transfers it at 115200
-baud, and opens `picocom`. The model continuously prints CSV rows beginning
-with this header:
+baud, and opens `picocom`. The FPGA application starts the compiled five-cell
+network immediately. This autonomous FPGA build does not print model data to
+UART, so a blank `picocom` window after a successful transfer is expected. Exit
+`picocom` with `Ctrl+A`, then `Ctrl+X`.
 
-```text
-sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,state,voltage_nv,nearest_uv
-```
-
-The timing fields are captured immediately after `fp_delay_until()` returns
-and before `icc_step()` runs:
-
-- `fpga_time_ns` is the low 32 bits of FlexPRET's hardware time counter;
-- `period_ns` is the measured difference between consecutive iteration starts;
-- `release_lateness_ns` is the difference between the actual and scheduled
-  iteration start.
-
-The 32-bit `fpga_time_ns` value wraps approximately every 4.295 seconds.
-Unsigned subtraction keeps `period_ns` valid across that wrap.
-
-To exit `picocom`, press `Ctrl+A`, release the keys, then press `Ctrl+X`.
+The Verilator target uses the same compiled configuration and prints CSV for
+development testing.
 
 ## Troubleshooting
 
@@ -244,9 +238,13 @@ cmake --build build-fpga --target icc-model
 ./bin/icc-model
 ```
 
-### Flash Reaches Picocom but the Model Does Not Start
+### Flash Reaches Picocom but Shows No Model Output
 
-Check that:
+This is expected for the autonomous FPGA build: UART is used by the bootloader
+to load the application, but the running ICC model does not transmit telemetry.
+Use the Verilator target when CSV output is required.
+
+If the application transfer itself fails, check that:
 
 - the bootloader `.sof` is programmed;
 - `SW[0]` was on when `KEY[3]` was pressed;
@@ -272,14 +270,113 @@ Examples:
 ```
 
 The nanovolt is the storage unit, so runtime voltage addition and comparison
-use signed integers. All slope-to-increment conversions were performed before
-compilation for the fixed 200 ms timestep. The update contains no
+use signed integers. The source increments are calibrated for the production
+200 ms timestep. Experimental smaller-step increments are scaled at compile
+time using integer constant expressions. The runtime update contains no
 floating-point values, multiplication, division, or square-root operations.
 Diagnostic conversion to nearest whole microvolts uses integer division only
 for CSV output.
 
-The app uses a 20-second pacemaker interval and prints one CSV row per 200 ms
-model step.
+Both targets use Cell 4 as a 20-second pacemaker, four follower cells, 1000 ms
+path delays, and 6 mm gaps. Path delay and active propagation time remain
+integer milliseconds.
+
+## Configure the Autonomous 1D Network
+
+The network parameters are compiled into `src/main.c`. Change the three arrays
+inside `initialize_network()` to configure the cell intervals, path delays, and
+path gaps:
+
+```c
+static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
+    0, 0, 0, 0, 20
+};
+
+static const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
+    1000U, 1000U, 1000U, 1000U
+};
+
+static const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {
+    6U, 6U, 6U, 6U
+};
+```
+
+`intervals[i]` configures Cell `i`. Path `i` joins Cell `i` to Cell `i + 1`,
+so `delays[i]` and `gaps[i]` configure that connection. The supported cell
+intervals are:
+
+| Value | Meaning |
+|---:|---|
+| `-1` | Blocked cell |
+| `0` | Follower with no intrinsic pacemaker |
+| `15`, `20`, `23`, `26`, `30`, `40` | Pacemaker interval in seconds |
+
+Every path delay must be greater than the selected model timestep and an exact
+multiple of that timestep. With the production 200 ms timestep, valid examples
+include 400, 600, 800, 1000, and 1200 ms. Each gap must be from 1 to 255 mm.
+
+For example, this makes Cell 0 the pacemaker and gives every path different
+parameters:
+
+```c
+static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
+    20, 0, 0, 0, 0
+};
+
+static const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
+    400U, 600U, 800U, 1000U
+};
+
+static const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {
+    3U, 4U, 5U, 6U
+};
+```
+
+To change the number of cells, edit `inc/network.h`:
+
+```c
+#define ICC_NETWORK_1D_CELL_COUNT 7U
+#define ICC_NETWORK_1D_PATH_COUNT (ICC_NETWORK_1D_CELL_COUNT - 1U)
+```
+
+The path count is derived automatically. After changing the cell count, update
+the arrays in `src/main.c` so they contain one interval per cell and one delay
+and gap per path. The construction and stepping loops in `src/network.c`
+already use these compile-time counts and do not need to be rewritten.
+
+The emulator CSV functions `print_csv_header()` and `print_csv_row()` currently
+describe exactly five cells and four paths. They must also be updated when the
+cell count changes. With fewer than five cells, the existing output code could
+access outside the arrays; with more than five cells, it would omit the extra
+cells. Update the five-cell expectations in `tests/test_icc.c` as well.
+
+The defaults in `inc/path.h` do not override these arrays. The autonomous
+network passes every delay and gap explicitly from `src/main.c`. Adding a new
+pacemaker interval outside the supported list also requires adding its
+precomputed integer resting increment and validation case in `src/icc.c`.
+
+## Experimental Timestep Selection
+
+The production timestep is 200 ms. A smaller compile-time timestep can be
+selected for sensitivity testing:
+
+```bash
+cmake -S . -B build-emu-100ms \
+  -DTARGET=emulator \
+  -DICC_MODEL_TIMESTEP_MS=100
+cmake --build build-emu-100ms --target icc-model
+```
+
+`ICC_MODEL_TIMESTEP_MS` must be no greater than 200 and must divide 200 exactly.
+The tested values are 200, 100, 50, 20, and 10 ms. The compile-time scaling uses
+integer arithmetic and introduces no floating point.
+
+Only the 200 ms calibration currently reproduces every configured intrinsic
+cpm exactly. Smaller timesteps produced up to 1.70% period error because each
+small voltage increment is independently rounded to an integer nanovolt. They
+remain experimental; see
+[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md) before using them in a
+physiological result.
 
 ## 5. Build and Run in the Emulator
 
@@ -314,7 +411,7 @@ fp-emu --hwconfig
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
 gcc -std=c11 -Wall -Wextra -Werror -Iinc \
-    src/icc.c tests/test_icc.c -o /tmp/icc-model-test
+    src/icc.c src/path.c src/network.c tests/test_icc.c -o /tmp/icc-model-test
 /tmp/icc-model-test
 ```
 
@@ -322,10 +419,12 @@ gcc -std=c11 -Wall -Wextra -Werror -Iinc \
 
 - `TARGET` accepts `fpga` or `emulator`.
 - The default is `fpga`.
+- `ICC_MODEL_TIMESTEP_MS` defaults to `200`; tested experimental values are
+  `100`, `50`, `20`, and `10`.
 - FPGA and emulator builds use separate build directories.
 - `bin/icc-model` is the FPGA launcher.
 - `bin/icc-model-emu` is the emulator launcher.
-- No path or EGM implementation is included at this stage.
+- Five cells and four bidirectional paths are included; EGM is not implemented.
 
 ## Short Version
 

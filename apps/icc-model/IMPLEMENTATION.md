@@ -2,14 +2,14 @@
 
 ## 1. Purpose and scope
 
-This document describes the first stage of porting the ICC model to FlexPRET.
-The application implements one ICC cell as a deterministic, fixed-timestep
-state machine that runs on either the FlexPRET FPGA or the Verilator-based
-FlexPRET emulator.
+This document describes the ICC, path, and 1D network stages of porting the
+model to FlexPRET. The application implements five ICC cells and four
+bidirectional paths as deterministic, fixed-timestep state machines that run on
+either the FlexPRET FPGA or the Verilator-based FlexPRET emulator.
 
-This stage intentionally excludes propagation paths, an ICC network, EGM
-generation, controller communication, and GES integration. Those components
-will be added and validated separately.
+This stage intentionally excludes a two-dimensional network, EGM generation,
+and GES integration. Those components will be added
+and validated separately.
 
 ## 2. Application structure
 
@@ -19,8 +19,12 @@ icc-model/
 ├── README.md            Build, emulator, flash, and test commands
 ├── IMPLEMENTATION.md    Design rationale and verification record
 ├── inc/icc.h            Types, states, constants, and public interface
+├── inc/path.h           Integer path types, states, and public interface
+├── inc/network.h        Static five-cell 1D network interface
 ├── src/icc.c            Integer ICC state machine
-├── src/main.c           FlexPRET periodic execution and CSV output
+├── src/path.c           Integer bidirectional propagation state machine
+├── src/network.c        Five-cell update ordering and path construction
+├── src/main.c           Five-cell scheduling and target-specific output
 └── tests/test_icc.c     Host-side model tests
 ```
 
@@ -52,7 +56,7 @@ typedef int32_t IccVoltageNv;
 Examples:
 
 ```text
--0.004401 mV  -> -4494 nV
+-0.004401 mV  -> -4401 nV
 -67.633600 mV -> -67633600 nV
 ```
 
@@ -87,13 +91,13 @@ Fractional microvolt information remains present because one microvolt contains
 1000 nanovolts. For example:
 
 ```text
--67000000 nV + -13996 nV = -67013996 nV
--67013996 nV + -13996 nV = -67027992 nV
--67027992 nV + -13996 nV = -67041988 nV
+-67000000 nV + -14307 nV = -67014307 nV
+-67014307 nV + -14307 nV = -67028614 nV
+-67028614 nV + -14307 nV = -67042921 nV
 ```
 
-In millivolts, these results are `-67.013996`, `-67.027992`, and
-`-67.041988 mV`. No floating-point remainder is calculated at runtime.
+In millivolts, these results are `-67.014307`, `-67.028614`, and
+`-67.042921 mV`. No floating-point remainder is calculated at runtime.
 
 ### 3.3 Resolution, accuracy, and range
 
@@ -127,7 +131,7 @@ Thresholds and reset values are stored directly in nanovolts:
 | Q3 to Q0 | `-66988400 nV` | -66.988400 mV |
 | Voltage floor | `-67000000 nV` | -67.000000 mV |
 
-Per-step increments were generated for the fixed 200 ms model period:
+The source increments were calibrated for the production 200 ms model period:
 
 | State | Integer increment | Millivolts per step |
 |---|---:|---:|
@@ -145,7 +149,19 @@ Resting increments are selected from a lookup table:
 | 26 s | `-8489 nV` | -0.008489 mV |
 | 30 s | `-6728 nV` | -0.006728 mV |
 | 40 s | `-4401 nV` | -0.004401 mV |
-| 0 or -1 | `0 nV` | Follower or blocked cell |
+| 0 or -1 | `0 nV` | No intrinsic activity or blocked cell |
+
+For experimental timesteps below 200 ms, each calibrated increment is scaled at
+compile time using signed integer round-to-nearest arithmetic:
+
+```text
+increment_dt = round(increment_200 * timestep_ms / 200)
+```
+
+The runtime state update remains an integer addition. Timestep sensitivity is
+not numerically neutral, however: independent rounding can shift voltage
+threshold crossings and configured cpm. The measured errors and limitations are
+reported in [TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md).
 
 The target state update performs no floating-point operation, slope
 multiplication, division, or square root. The diagnostic nearest-microvolt
@@ -170,18 +186,21 @@ repolarization. Each `icc_step()` call first evaluates transitions and then
 applies the nanovolt increment for the resulting state. A newly entered state
 therefore applies its increment in the same update.
 
-The initial wait is 4999 ms, while the timestep is 200 ms. Its first
-representable expiration is consequently 5000 ms. On that step, the reset
-voltage is assigned, Q0 is entered, and the Q0 increment is applied.
+The initial wait is 4999 ms. At the production 200 ms timestep, its first
+representable expiration is 5000 ms. On that step, the reset voltage is
+assigned, Q0 is entered, and the Q0 increment is applied. Smaller timesteps use
+the same elapsed-millisecond accumulator.
 
-The `relay` field is retained for the future path implementation. A follower
-cell uses a zero resting increment and requires a relay to enter Q1. A blocked
-cell consumes a relay without depolarizing. No path currently produces relay
-events.
+The `relay` field connects the cell and path state machines. A cell configured
+with zero has no intrinsic activity but can enter Q1 in response to a relay. A
+blocked cell consumes a relay without depolarizing. `icc_is_active()` and
+`icc_stimulate()` provide the path with a small interface instead of duplicating
+ICC internals.
 
 ## 6. FlexPRET periodic execution
 
-`main.c` releases the cell update every 200 ms:
+`main.c` releases the complete 1D network update at the selected model period.
+The production default is 200 ms:
 
 ```c
 uint32_t next_release = rdtime() + ICC_PERIOD_NS;
@@ -189,19 +208,19 @@ uint32_t next_release = rdtime() + ICC_PERIOD_NS;
 while (1) {
     fp_delay_until(next_release);
     next_release += ICC_PERIOD_NS;
-    icc_step(&cell);
+    icc_network_1d_step(&network);
 }
 ```
 
 Using an absolute release sequence avoids intentionally adding the previous
-iteration's execution time to the next period. CSV output is retained for
-development and comparison but must later be removed, reduced, or included in
-timing analysis.
+iteration's execution time to the next period. The ordinary emulator retains
+CSV output for development and comparison. The autonomous FPGA build does not
+transmit runtime telemetry.
 
-The CSV format is:
+The emulator CSV format is:
 
 ```text
-sample,time_ms,state,voltage_nv,nearest_uv
+sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,cell_0_state,cell_0_nv,...,cell_4_state,cell_4_nv,path_0_state,...,path_3_state
 ```
 
 The header and rows use `printf()` so both appear through the Verilator host
@@ -209,8 +228,10 @@ output mechanism.
 
 ## 7. FPGA and emulator targets
 
-The CMake `TARGET` option accepts `fpga` or `emulator`. Separate build
-directories are required because the FPGA uses the SDK bootloader linker
+The CMake `TARGET` option accepts `fpga` or `emulator`.
+`ICC_MODEL_TIMESTEP_MS` defaults to 200 and must divide 200 exactly; 100, 50,
+20, and 10 ms are available for experimental sensitivity testing. Separate
+build directories are required because the FPGA uses the SDK bootloader linker
 configuration and the emulator uses the no-bootloader configuration.
 
 | Target | Build directory | Launcher |
@@ -222,46 +243,128 @@ The exact commands are maintained in `README.md`.
 
 ## 8. Path numerical policy
 
-The path model has not yet been implemented. When added, it will also use one
-integer per stored physical quantity. It will not reuse the voltage unit for
-unrelated quantities. Proposed explicit units include:
+The path model preserves the six-state `iccnet-core` propagation semantics:
 
 ```text
-propagation delay    -> integer ticks or microseconds
-path length          -> integer micrometres
-conduction velocity  -> integer micrometres per second
-propagation position -> separately documented integer unit if required
+IDLE
+ANNIHILATE
+CELL_A_WAIT
+CELL_A_RELAY
+CELL_B_WAIT
+CELL_B_RELAY
 ```
 
-Configuration-time calculations may require 64-bit intermediates even when a
-stored path value is 32-bit. The authoritative path semantics and EGM needs
-must be examined before selecting final path fields. EGM arithmetic remains a
-separate numerical design because it introduces geometry, multiplication,
-dynamic range, and accumulation.
+A path connects two `Icc` objects and stores its propagation delay and elapsed
+time as integer milliseconds:
+
+```c
+typedef struct {
+    IccPathState state;
+    uint32_t elapsed_ms;
+    int32_t active_time_ms[2];
+    uint16_t delay_ms;
+    uint8_t gap_mm;
+    Icc *cell_a;
+    Icc *cell_b;
+    bool initialized;
+} IccPath;
+```
+
+`active_time_ms[0]` represents A-to-B propagation and
+`active_time_ms[1]` represents B-to-A propagation. The value `-1` denotes an
+inactive direction. This replaces the two external `float` times in seconds
+used by `iccnet-core`. The physical gap remains an integer number of
+millimetres and is stored for the later EGM stage; it does not participate in
+the current relay calculation.
+
+When one endpoint is active, the path enters the corresponding wait state. It
+adds `ICC_TIMESTEP_MS` on each update and sets the destination's relay before
+the update on which the nominal delay expires. The destination consumes that
+relay during the next ICC step. For a 1000 ms delay and a 200 ms timestep:
+
+```text
+A enters Q1 and path detects A       0 ms
+path A_WAIT                         200 ms
+path A_WAIT                         400 ms
+path A_WAIT                         600 ms
+path sets B relay                   800 ms
+B consumes relay and enters Q1     1000 ms
+```
+
+Waiting until the path accumulator itself reached 1000 ms would delay the ICC
+transition until 1200 ms because the cell updates occur before the path update.
+The one-step look-ahead therefore preserves the effective propagation delay of
+`iccnet-core`.
+
+If both endpoints are active while the path is idle, the path enters
+`ANNIHILATE` and relays neither wave. It returns to `IDLE` when both endpoints
+leave Q1. The state machine is bidirectional, so an active destination can be
+detected in the reverse direction after a relay. This matches `iccnet-core`;
+the source cell ignores that reverse relay while outside Q0.
+
+The path calculation contains no floating-point operations, multiplication,
+division, square root, or dynamic allocation. EGM arithmetic remains a
+separate numerical design because it introduces geometry, distance-dependent
+terms, multiplication, dynamic range, and accumulation.
+
+### 8.1 Static 1D network
+
+The network uses fixed-size arrays and performs no dynamic allocation:
+
+```c
+typedef struct {
+    Icc cells[5];
+    IccPath paths[4];
+    bool initialized;
+} IccNetwork1d;
+```
+
+Path `i` connects Cell `i` to Cell `i + 1`. Each step updates all five cells
+first and then all four paths, preserving the execution order used by
+`iccnet-core` applications. Initialization now accepts arrays containing five
+independent cell intervals, four delays, and four gaps. Both the emulator and
+FPGA targets use the same compiled configuration: Cell 4 is a 20-second
+pacemaker, Cells 0-3 are followers, every path delay is 1000 ms, and every gap
+is 6 mm. No floating-point conversion is performed by the FPGA.
 
 ## 9. Verification
 
-Host tests cover the initial wait, first upstroke, follower relay behaviour,
-blocked-cell behaviour, exact nanovolt accumulation, and diagnostic rounding.
-Both FPGA and emulator targets build successfully, and the RISC-V binary is
-checked for accidental software floating-point helper symbols.
+Host tests cover the original ICC and path behaviour, network topology,
+invalid pacemaker configuration, and the first activation time of every cell
+in the chain. Both FPGA and emulator targets build successfully, and the
+RISC-V binary is checked for accidental software floating-point helper
+symbols.
 
-The Verilator trace must preserve the previous physical results. Representative
-values are:
+The Verilator trace confirms one 1000 ms delay per hop:
 
-| Sample | Time | State | Voltage |
-|---:|---:|---|---:|
-| 25 | 5000 ms | Q0 | `-67647596 nV` |
-| 26 | 5200 ms | Q1 | `-58942636 nV` |
-| 32 | 6400 ms | Q2 | `-24291052 nV` |
-| 59 | 11800 ms | Q3 | `-30749031 nV` |
-| 80 | 16000 ms | Q3 floor | `-67000000 nV` |
-| 81 | 16200 ms | Q0 | `-67013996 nV` |
+| Cell | First Q1 time | Delay from preceding cell |
+|---:|---:|---:|
+| 4 | 5200 ms | Pacemaker |
+| 3 | 6200 ms | 1000 ms |
+| 2 | 7200 ms | 1000 ms |
+| 1 | 8200 ms | 1000 ms |
+| 0 | 9200 ms | 1000 ms |
+
+Across this captured propagation window, the measured period remained
+`200000000 ns` and release lateness remained `160 ns`.
+
+The RISC-V memory use for the five-cell network is:
+
+| Target | ROM | RAM |
+|---|---:|---:|
+| Emulator | 12,732 bytes | 3,548 bytes |
+| FPGA | 11,408 bytes | 1,096 bytes |
 
 ## 10. Current limitations and next stage
 
-The application still contains one compile-time configured cell and diagnostic
-output. It has no paths, network scheduler, EGM, controller protocol, or GES
-integration. The next implementation stage is one directed path connecting a
-pacemaker cell to a follower cell, followed by host and Verilator comparison
-against the authoritative model.
+The application contains an autonomous five-cell 1D network with compiled
+parameters. Runtime configuration, telemetry, grid dimensions, EGM, a
+two-dimensional network, and GES integration are not implemented. The next
+numerical stage is the EGM calculation, which should be designed and validated
+separately from the integer ICC and path state machines.
+
+The 200 ms timestep is the validated numerical mode. Experimental smaller
+timesteps meet the five-cell Verilator deadlines and preserve exact integer path
+delays, but rounded nanovolt increments introduce up to 1.70% intrinsic-period
+error. Exact smaller-timestep cpm requires a future numerical design decision,
+such as fractional remainder accumulation or explicit time-based phase logic.

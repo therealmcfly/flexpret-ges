@@ -10,30 +10,58 @@ static const IccVoltageNv kQ2ToQ3Nv = -28989400;
 static const IccVoltageNv kQ3ToQ0Nv = -66988400;
 static const IccVoltageNv kVoltageFloorNv = -67000000;
 
-/* Per-tick increments generated for ICC_TIMESTEP_MS = 200 ms. */
-static const IccVoltageNv kQ1IncrementNv = 8704960;
-static const IccVoltageNv kQ2IncrementNv = -181952;
-static const IccVoltageNv kQ3IncrementNv = -1727227;
+/*
+ * Scale the calibrated 200 ms increments using signed round-to-nearest integer
+ * arithmetic. The expression is compile-time constant and introduces no
+ * floating-point operation into the target binary.
+ */
+#define ICC_SCALE_200MS_INCREMENT(value) \
+    ((IccVoltageNv)((((int64_t)(value) * (int64_t)ICC_TIMESTEP_MS) + \
+        ((value) >= 0 ? 100 : -100)) / 200))
+
+static const IccVoltageNv kQ1IncrementNv =
+    ICC_SCALE_200MS_INCREMENT(8704960);
+static const IccVoltageNv kQ2IncrementNv =
+    ICC_SCALE_200MS_INCREMENT(-181952);
+static const IccVoltageNv kQ3IncrementNv =
+    ICC_SCALE_200MS_INCREMENT(-1727227);
 
 static IccVoltageNv resting_increment_nv(int8_t interval_s)
 {
     switch (interval_s) {
     case 15:
-        return -32003;
+        return ICC_SCALE_200MS_INCREMENT(-32003);
     case 20:
-        return -14307;
+        return ICC_SCALE_200MS_INCREMENT(-14307);
     case 23:
-        return -10593;
+        return ICC_SCALE_200MS_INCREMENT(-10593);
     case 26:
-        return -8489;
+        return ICC_SCALE_200MS_INCREMENT(-8489);
     case 30:
-        return -6728;
+        return ICC_SCALE_200MS_INCREMENT(-6728);
     case 40:
-        return -4401;
+        return ICC_SCALE_200MS_INCREMENT(-4401);
     case -1: /* Blocked cell. */
     case 0:  /* Follower cell. */
     default:
         return 0;
+    }
+}
+
+bool icc_interval_is_supported(int8_t interval_s)
+{
+    switch (interval_s) {
+    case -1:
+    case 0:
+    case 15:
+    case 20:
+    case 23:
+    case 26:
+    case 30:
+    case 40:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -130,6 +158,22 @@ IccVoltageNv icc_step(Icc *cell)
     }
 
     return cell->voltage_nv;
+}
+
+bool icc_is_active(const Icc *cell)
+{
+    return cell != NULL &&
+           cell->initialized &&
+           cell->state == ICC_Q1_UPSTROKE;
+}
+
+void icc_stimulate(Icc *cell)
+{
+    if (cell == NULL || !cell->initialized) {
+        return;
+    }
+
+    cell->relay = 1;
 }
 
 int32_t icc_voltage_nearest_uv(const Icc *cell)

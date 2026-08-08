@@ -3,24 +3,37 @@
 #include <stdio.h>
 
 #include "icc.h"
+#include "network.h"
+#include "path.h"
+
+static int32_t scale_200ms_increment(int32_t value)
+{
+    return (int32_t)((((int64_t)value * (int64_t)ICC_TIMESTEP_MS) +
+        (value >= 0 ? 100 : -100)) / 200);
+}
 
 static void test_initial_wait_and_first_upstroke(void)
 {
     Icc cell;
+    const uint32_t wait_steps =
+        (ICC_WAIT_MS + ICC_TIMESTEP_MS - 1U) / ICC_TIMESTEP_MS;
     icc_init(&cell, 20);
 
-    for (int i = 0; i < 24; ++i) {
+    for (uint32_t i = 0U; i < wait_steps - 1U; ++i) {
         (void)icc_step(&cell);
         assert(cell.state == ICC_WAIT);
     }
 
     (void)icc_step(&cell);
     assert(cell.state == ICC_Q0_RESTING);
-    assert(cell.voltage_nv == -67647907);
+    assert(cell.voltage_nv ==
+           -67633600 + scale_200ms_increment(-14307));
 
     (void)icc_step(&cell);
     assert(cell.state == ICC_Q1_UPSTROKE);
-    assert(cell.voltage_nv == -58942947);
+    assert(cell.voltage_nv ==
+           -67633600 + scale_200ms_increment(-14307) +
+           scale_200ms_increment(8704960));
 }
 
 static void test_follower_requires_relay(void)
@@ -28,7 +41,7 @@ static void test_follower_requires_relay(void)
     Icc cell;
     icc_init(&cell, 0);
 
-    for (int i = 0; i < 40; ++i) {
+    for (uint32_t i = 0U; i < 8000U / ICC_TIMESTEP_MS; ++i) {
         (void)icc_step(&cell);
     }
     assert(cell.state == ICC_Q0_RESTING);
@@ -43,7 +56,9 @@ static void test_blocked_cell_absorbs_relay(void)
     Icc cell;
     icc_init(&cell, -1);
 
-    for (int i = 0; i < 25; ++i) {
+    for (uint32_t i = 0U;
+         i < (ICC_WAIT_MS + ICC_TIMESTEP_MS - 1U) / ICC_TIMESTEP_MS;
+         ++i) {
         (void)icc_step(&cell);
     }
 
@@ -53,6 +68,7 @@ static void test_blocked_cell_absorbs_relay(void)
     assert(cell.relay == 0);
 }
 
+#if ICC_TIMESTEP_MS == 200U
 static void test_nanovolt_accumulation(void)
 {
     Icc cell;
@@ -68,6 +84,7 @@ static void test_nanovolt_accumulation(void)
     (void)icc_step(&cell);
     assert(cell.voltage_nv == -67028614);
 }
+#endif
 
 static void test_display_rounding(void)
 {
@@ -94,7 +111,9 @@ static int next_q1_sample(Icc *cell, int after_sample)
 {
     IccState previous = cell->state;
 
-    for (int sample = after_sample + 1; sample < 2000; ++sample) {
+    for (int sample = after_sample + 1;
+         sample < 100000 / (int)ICC_TIMESTEP_MS;
+         ++sample) {
         (void)icc_step(cell);
         if (cell->state == ICC_Q1_UPSTROKE && previous != ICC_Q1_UPSTROKE) {
             return sample;
@@ -116,9 +135,232 @@ static void test_exact_pacemaker_intervals(void)
         int first_q1 = next_q1_sample(&cell, 0);
         int second_q1 = next_q1_sample(&cell, first_q1);
         int elapsed_ms = (second_q1 - first_q1) * (int)ICC_TIMESTEP_MS;
+        int expected_ms = intervals_s[i] * 1000;
+        int error_ms = elapsed_ms - expected_ms;
 
-        assert(elapsed_ms == intervals_s[i] * 1000);
+        if (error_ms < 0) {
+            error_ms = -error_ms;
+        }
+#if ICC_TIMESTEP_MS == 200U
+        assert(error_ms == 0);
+#else
+        /* Rounded experimental increments must remain within 2% of target. */
+        assert((int64_t)error_ms * 100 <= (int64_t)expected_ms * 2);
+#endif
     }
+}
+
+static void set_resting(Icc *cell)
+{
+    cell->state = ICC_Q0_RESTING;
+    cell->voltage_nv = -67633600;
+    cell->wait_ms_accum = 0U;
+    cell->relay = 0;
+}
+
+static void test_path_relays_a_to_b_at_effective_delay(void)
+{
+    Icc cell_a;
+    Icc cell_b;
+    IccPath path;
+
+    icc_init(&cell_a, 0);
+    icc_init(&cell_b, 0);
+    set_resting(&cell_a);
+    set_resting(&cell_b);
+    cell_a.state = ICC_Q1_UPSTROKE;
+
+    icc_path_init(&path, &cell_a, &cell_b, 1000U, 6U);
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_CELL_A_WAIT);
+    assert(path.active_time_ms[0] == 0);
+    assert(path.active_time_ms[1] == ICC_PATH_INACTIVE_TIME_MS);
+
+    for (uint32_t step = 0U;
+         step < 1000U / ICC_TIMESTEP_MS - 1U;
+         ++step) {
+        icc_path_step(&path);
+    }
+
+    assert(path.state == ICC_PATH_CELL_A_RELAY);
+    assert(path.elapsed_ms == 1000U - ICC_TIMESTEP_MS);
+    assert(cell_b.relay == 1);
+
+    (void)icc_step(&cell_b);
+    assert(cell_b.state == ICC_Q1_UPSTROKE);
+    assert(cell_b.relay == 0);
+
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_IDLE);
+    assert(path.active_time_ms[0] == ICC_PATH_INACTIVE_TIME_MS);
+}
+
+static void test_path_relays_b_to_a(void)
+{
+    Icc cell_a;
+    Icc cell_b;
+    IccPath path;
+
+    icc_init(&cell_a, 0);
+    icc_init(&cell_b, 0);
+    set_resting(&cell_a);
+    set_resting(&cell_b);
+    cell_b.state = ICC_Q1_UPSTROKE;
+
+    icc_path_init(&path, &cell_a, &cell_b, 1000U, 6U);
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_CELL_B_WAIT);
+
+    for (uint32_t step = 0U;
+         step < 1000U / ICC_TIMESTEP_MS - 1U;
+         ++step) {
+        icc_path_step(&path);
+    }
+
+    assert(path.state == ICC_PATH_CELL_B_RELAY);
+    assert(path.active_time_ms[1] ==
+           (int32_t)(1000U - ICC_TIMESTEP_MS));
+    assert(cell_a.relay == 1);
+}
+
+static void test_path_annihilates_simultaneous_activation(void)
+{
+    Icc cell_a;
+    Icc cell_b;
+    IccPath path;
+
+    icc_init(&cell_a, 0);
+    icc_init(&cell_b, 0);
+    cell_a.state = ICC_Q1_UPSTROKE;
+    cell_b.state = ICC_Q1_UPSTROKE;
+    icc_path_init(&path, &cell_a, &cell_b, 1000U, 6U);
+
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_ANNIHILATE);
+    assert(cell_a.relay == 0);
+    assert(cell_b.relay == 0);
+
+    cell_a.state = ICC_Q2_PLATEAU;
+    cell_b.state = ICC_Q2_PLATEAU;
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_IDLE);
+}
+
+static void test_blocked_destination_absorbs_path_relay(void)
+{
+    Icc cell_a;
+    Icc cell_b;
+    IccPath path;
+
+    icc_init(&cell_a, 0);
+    icc_init(&cell_b, -1);
+    set_resting(&cell_a);
+    set_resting(&cell_b);
+    cell_a.state = ICC_Q1_UPSTROKE;
+    icc_path_init(&path, &cell_a, &cell_b, 1000U, 6U);
+
+    icc_path_step(&path);
+    for (uint32_t step = 0U;
+         step < 1000U / ICC_TIMESTEP_MS - 1U;
+         ++step) {
+        icc_path_step(&path);
+    }
+    assert(cell_b.relay == 1);
+
+    (void)icc_step(&cell_b);
+    assert(cell_b.state == ICC_Q0_RESTING);
+    assert(cell_b.relay == 0);
+}
+
+static void test_five_cell_1d_network_propagation(void)
+{
+    const int32_t pacemaker_first_q1_ms =
+        (int32_t)(((ICC_WAIT_MS + ICC_TIMESTEP_MS - 1U) /
+                   ICC_TIMESTEP_MS + 1U) * ICC_TIMESTEP_MS);
+    int32_t expected_first_q1_ms[ICC_NETWORK_1D_CELL_COUNT];
+    int32_t first_q1_ms[ICC_NETWORK_1D_CELL_COUNT] = {-1, -1, -1, -1, -1};
+    IccNetwork1d network;
+    const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {0, 0, 0, 0, 20};
+    const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
+        1000U, 1000U, 1000U, 1000U
+    };
+    const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {6U, 6U, 6U, 6U};
+
+    assert(icc_network_1d_init(&network, intervals, delays, gaps));
+
+    for (uint8_t index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
+        expected_first_q1_ms[index] =
+            pacemaker_first_q1_ms +
+            (int32_t)(ICC_NETWORK_1D_CELL_COUNT - 1U - index) * 1000;
+    }
+
+    for (uint8_t index = 0U; index < ICC_NETWORK_1D_PATH_COUNT; ++index) {
+        assert(network.paths[index].cell_a == &network.cells[index]);
+        assert(network.paths[index].cell_b == &network.cells[index + 1U]);
+        assert(network.paths[index].delay_ms == 1000U);
+        assert(network.paths[index].gap_mm == 6U);
+    }
+
+    for (int32_t sample = 1;
+         sample <= 20000 / (int32_t)ICC_TIMESTEP_MS;
+         ++sample) {
+        icc_network_1d_step(&network);
+
+        for (uint8_t index = 0U;
+             index < ICC_NETWORK_1D_CELL_COUNT;
+             ++index) {
+            if (first_q1_ms[index] < 0 &&
+                network.cells[index].state == ICC_Q1_UPSTROKE) {
+                first_q1_ms[index] = sample * (int32_t)ICC_TIMESTEP_MS;
+            }
+        }
+    }
+
+    for (uint8_t index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
+        assert(first_q1_ms[index] == expected_first_q1_ms[index]);
+    }
+}
+
+static void test_five_cell_network_configuration(void)
+{
+    const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
+        -1, 15, 23, 30, 40
+    };
+    const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
+        400U, 600U, 800U, 1000U
+    };
+    const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {3U, 4U, 5U, 6U};
+    IccNetwork1d network;
+
+    assert(icc_network_1d_init(&network, intervals, delays, gaps));
+    for (uint8_t index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
+        assert(network.cells[index].pacemaker_interval_s == intervals[index]);
+    }
+    for (uint8_t index = 0U; index < ICC_NETWORK_1D_PATH_COUNT; ++index) {
+        assert(network.paths[index].delay_ms == delays[index]);
+        assert(network.paths[index].gap_mm == gaps[index]);
+    }
+}
+
+static void test_five_cell_network_rejects_invalid_configuration(void)
+{
+    int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {0, 0, 0, 0, 20};
+    uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
+        1000U, 1000U, 1000U, 1000U
+    };
+    uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {6U, 6U, 6U, 6U};
+    IccNetwork1d network;
+
+    intervals[2] = 17;
+    assert(!icc_network_1d_init(&network, intervals, delays, gaps));
+    intervals[2] = 0;
+
+    delays[1] = ICC_TIMESTEP_MS;
+    assert(!icc_network_1d_init(&network, intervals, delays, gaps));
+    delays[1] = 1000U;
+
+    gaps[3] = 0U;
+    assert(!icc_network_1d_init(&network, intervals, delays, gaps));
 }
 
 int main(void)
@@ -127,9 +369,18 @@ int main(void)
     test_initial_wait_and_first_upstroke();
     test_follower_requires_relay();
     test_blocked_cell_absorbs_relay();
+#if ICC_TIMESTEP_MS == 200U
     test_nanovolt_accumulation();
+#endif
     test_display_rounding();
     test_exact_pacemaker_intervals();
+    test_path_relays_a_to_b_at_effective_delay();
+    test_path_relays_b_to_a();
+    test_path_annihilates_simultaneous_activation();
+    test_blocked_destination_absorbs_path_relay();
+    test_five_cell_1d_network_propagation();
+    test_five_cell_network_configuration();
+    test_five_cell_network_rejects_invalid_configuration();
     puts("icc-model tests passed");
     return 0;
 }
