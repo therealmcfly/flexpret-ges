@@ -138,6 +138,47 @@ The five-cell workload met every tested deadline down to 10 ms in Verilator.
 This demonstrates computational feasibility for this network size. Scheduler
 timing is independent of the separately calibrated Q0 period accuracy.
 
+## DE1-SoC hardware validation
+
+The calibrated five-cell network was subsequently tested on the physical
+DE1-SoC board on 8-9 August 2026. FlexPRET and its UART bootloader were already
+programmed into the FPGA. Each diagnostic application was built with
+`TARGET=fpga`, flashed through `/dev/ttyUSB0`, and run after resetting the board
+with SW0 high and KEY3 pressed.
+
+The production network configuration was used for every run: cell 4 was the
+20-second intrinsic pacemaker, cells 0-3 were followers, and each of the four
+paths had a one-second delay. The following measurements therefore validate
+the calibrated 20-second cell and path propagation on hardware; the other
+calibrated intrinsic intervals are covered by the host and Verilator matrices
+above.
+
+| Timestep | Measured Q1-to-Q1 interval | Cell-to-cell propagation | Measured loop period | Release lateness |
+|---:|---:|---:|---:|---:|
+| 200 ms | 20000 ms | 1000 ms | 200000000 ns | 160 ns |
+| 100 ms | 20000 ms | 1000 ms | 100000000 ns | 160 ns |
+| 50 ms | 20000 ms | 1000 ms | 50000000 ns | 160 ns |
+| 20 ms | 20000 ms | 1000 ms | 20000000 ns | 160 ns |
+| 10 ms | 20000 ms | 1000 ms | 10000000 ns | 160 ns |
+
+For example, the clean 10 ms event-only capture recorded cell 4 entering Q1
+at model times 85010 ms and 105010 ms. Cells 3, 2, 1, and 0 then entered Q1 at
+86010, 87010, 88010, and 89010 ms respectively. This gives an exact 20-second
+pacemaker interval and four exact one-second propagation steps.
+
+Full per-iteration CSV telemetry remained usable through the 20 ms test, but
+the receiver skipped some rows at that rate because of UART bandwidth. At
+10 ms, full CSV output saturated the serial connection and was not considered
+a valid timing test. The 10 ms run was rebuilt with temporary event-only
+telemetry that emitted a row only when a cell entered Q1. This removed the UART
+load while retaining the FPGA `rdtime()` period and release-lateness fields.
+The temporary diagnostic guards and event filter were removed after testing
+and are not part of the production application.
+
+These board measurements agree with the true-period Verilator results and
+confirm that the five-cell workload meets its deadlines on the deployed
+FlexPRET hardware for every supported timestep.
+
 ## Conclusion
 
 The 200 ms configuration remains the production mode and simultaneously
