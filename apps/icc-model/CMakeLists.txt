@@ -24,6 +24,8 @@ set(ICC_VERILATOR_TEST_SAMPLES "1000" CACHE STRING
   "Number of 200 ms model steps in the emulator scenario test")
 set(ICC_VERILATOR_TEST_PERIOD_NS "100000" CACHE STRING
   "Accelerated hardware scheduling period for emulator scenario tests")
+option(ICC_VERILATOR_EGM_TRACE
+  "Print one integer EGM sample per emulator test step" OFF)
 set(ICC_MODEL_TIMESTEP_MS "200" CACHE STRING
   "Biological ICC model timestep in milliseconds")
 set_property(CACHE ICC_MODEL_TIMESTEP_MS PROPERTY STRINGS 200 100 50 20 10)
@@ -37,6 +39,17 @@ if (NOT "${TARGET}" STREQUAL "fpga" AND NOT "${TARGET}" STREQUAL "emulator")
   message(FATAL_ERROR "TARGET must be either 'fpga' or 'emulator'")
 endif()
 
+set(EGM_GENERATED_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/generated/egm_1d5c")
+set(EGM_SELECTED_HEADER
+  "${EGM_GENERATED_DIR}/egm_lut_${ICC_MODEL_TIMESTEP_MS}ms.h")
+if (NOT EXISTS "${EGM_SELECTED_HEADER}")
+  message(FATAL_ERROR
+    "Missing generated EGM table: ${EGM_SELECTED_HEADER}\n"
+    "Run this before configuring the application:\n"
+    "  ./tools/generate_egm_luts.sh")
+endif()
+
 file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 add_executable(icc-model ${APP_SOURCES})
 
@@ -47,6 +60,7 @@ target_compile_definitions(icc-model PRIVATE
 target_include_directories(icc-model PRIVATE
   ${FP_SDK_PATH}/lib/include
   ${CMAKE_CURRENT_SOURCE_DIR}/inc
+  ${EGM_GENERATED_DIR}
 )
 
 include($ENV{FP_SDK_PATH}/cmake/fp-app.cmake)
@@ -61,6 +75,10 @@ if ("${TARGET}" STREQUAL "emulator")
       ICC_VERILATOR_TEST_SAMPLES=${ICC_VERILATOR_TEST_SAMPLES}U
       ICC_PERIOD_NS=${ICC_VERILATOR_TEST_PERIOD_NS}U
     )
+  endif()
+
+  if (ICC_VERILATOR_EGM_TRACE)
+    target_compile_definitions(icc-model PRIVATE ICC_VERILATOR_EGM_TRACE=1)
   endif()
 
   # The SDK normally generates bin/icc-model for every target. Use a distinct

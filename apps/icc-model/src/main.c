@@ -6,6 +6,7 @@
 #include <flexpret/csrs.h>
 #include <flexpret/time.h>
 
+#include "egm.h"
 #include "icc.h"
 #include "network.h"
 #include "path.h"
@@ -158,7 +159,7 @@ static void print_csv_header(void)
     printf("sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,"
            "cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,"
            "cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,"
-           "cell_4_state,cell_4_nv,path_0_state,path_1_state,"
+           "cell_4_state,cell_4_nv,egm_scaled,path_0_state,path_1_state,"
            "path_2_state,path_3_state\n");
 }
 
@@ -167,12 +168,13 @@ static void print_csv_row(
     uint32_t iteration_start,
     uint32_t measured_period,
     uint32_t release_lateness,
-    const IccNetwork1d *network)
+    const IccNetwork1d *network,
+    IccEgmValue egm_value)
 {
     printf("%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32
            ",%s,%" PRId32 ",%s,%" PRId32
            ",%s,%" PRId32 ",%s,%" PRId32
-           ",%s,%" PRId32 ",%s,%s,%s,%s\n",
+           ",%s,%" PRId32 ",%" PRId32 ",%s,%s,%s,%s\n",
            sample,
            sample * ICC_TIMESTEP_MS,
            iteration_start,
@@ -188,6 +190,7 @@ static void print_csv_row(
            network->cells[3].voltage_nv,
            icc_state_name(network->cells[4].state),
            network->cells[4].voltage_nv,
+           egm_value,
            icc_path_state_name(network->paths[0].state),
            icc_path_state_name(network->paths[1].state),
            icc_path_state_name(network->paths[2].state),
@@ -204,6 +207,7 @@ int main(void)
     uint32_t clock_probe_end;
     uint32_t next_release;
     uint32_t previous_iteration_start;
+    bool egm_configuration_matches;
 #if defined(__EMULATOR__) && defined(ICC_VERILATOR_TEST_SCENARIO)
     IccState previous_cell_states[ICC_NETWORK_1D_CELL_COUNT];
     IccPathState previous_path_states[ICC_NETWORK_1D_PATH_COUNT];
@@ -216,6 +220,13 @@ int main(void)
     if (!initialize_network(&network)) {
         return 1;
     }
+    egm_configuration_matches =
+        icc_egm_1d5c_configuration_matches(&network);
+#ifndef ICC_VERILATOR_TEST_SCENARIO
+    if (!egm_configuration_matches) {
+        return 1;
+    }
+#endif
 
     clock_probe_start = rdtime();
     fp_nop;
@@ -253,6 +264,7 @@ int main(void)
         uint32_t iteration_start;
         uint32_t measured_period;
         uint32_t release_lateness;
+        IccEgmValue egm_value = 0;
 #if defined(__EMULATOR__) && defined(ICC_VERILATOR_TEST_SCENARIO)
         bool relay_before_step[ICC_NETWORK_1D_CELL_COUNT];
 #endif
@@ -289,6 +301,9 @@ int main(void)
         }
 #endif
         icc_network_1d_step(&network);
+        if (egm_configuration_matches) {
+            egm_value = icc_egm_1d5c_compute(&network);
+        }
         sample++;
 
 #ifdef __EMULATOR__
@@ -301,6 +316,14 @@ int main(void)
             previous_cell_states,
             previous_path_states,
             relay_before_step);
+#ifdef ICC_VERILATOR_EGM_TRACE
+        printf("EGM,%u,%u,%" PRId32 "\n",
+               (unsigned)sample,
+               (unsigned)(sample * ICC_TIMESTEP_MS),
+               egm_value);
+#else
+        (void)egm_value;
+#endif
         for (index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
             previous_cell_states[index] = network.cells[index].state;
         }
@@ -323,11 +346,13 @@ int main(void)
             iteration_start,
             measured_period,
             release_lateness,
-            &network);
+            &network,
+            egm_value);
 #endif
 #else
         (void)measured_period;
         (void)release_lateness;
+        (void)egm_value;
 #endif
     }
 }

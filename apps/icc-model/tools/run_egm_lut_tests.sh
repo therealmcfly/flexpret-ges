@@ -12,10 +12,26 @@ gcc -std=c11 -Wall -Wextra -Werror \
     -lm \
     -o "${TEMP_DIR}/generate-egm-lut"
 
-mkdir -p "${TEMP_DIR}/generated"
-"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/generated" >/dev/null
+mkdir -p "${TEMP_DIR}/generated-first"
+mkdir -p "${TEMP_DIR}/generated-second"
+"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/generated-first" >/dev/null
+"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/generated-second" >/dev/null
 
-diff -ru "${APP_DIR}/generated/egm_1path" "${TEMP_DIR}/generated"
+diff -ru "${TEMP_DIR}/generated-first" "${TEMP_DIR}/generated-second"
+
+test "$(wc -l < "${TEMP_DIR}/generated-first/egm_five_electrode_waveforms.csv")" \
+    -eq 3701
+test "$(wc -l < "${TEMP_DIR}/generated-first/egm_five_electrode_summary.csv")" \
+    -eq 26
+awk -F, '
+    NR == 1 { next }
+    {
+        key = $1 FS $2 FS $5
+        if (seen[key]++) {
+            exit 1
+        }
+    }
+' "${TEMP_DIR}/generated-first/egm_five_electrode_waveforms.csv"
 
 for specification in \
     "200 5" \
@@ -26,7 +42,7 @@ for specification in \
 do
     read -r timestep_ms step_count <<<"${specification}"
     gcc -std=c11 -Wall -Wextra -Werror \
-        -I"${TEMP_DIR}/generated" \
+        -I"${TEMP_DIR}/generated-first" \
         -DEGM_LUT_HEADER=\"egm_lut_${timestep_ms}ms.h\" \
         -DEXPECTED_EGM_TIMESTEP_MS=${timestep_ms}U \
         -DEXPECTED_EGM_STEP_COUNT=${step_count}U \

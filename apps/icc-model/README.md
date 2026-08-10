@@ -6,8 +6,9 @@ cell intervals and four path delays and gaps are compiled into the application.
 The FlexPRET bootloader is programmed onto the FPGA first, then the app is sent
 to instruction scratchpad memory over UART.
 
-This stage includes the ICC, path, and 1D network models but deliberately does
-not yet contain controller integration, EGM calculation, or GES communication.
+This stage includes the ICC, path, 1D network, and first integer EGM runtime.
+The EGM uses generated four-path lookup tables and a fixed-bounds target-side
+sum. It does not yet contain controller integration or GES communication.
 Design details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The 40-case
 pacemaker-location and path-delay campaign is reported in
 [VERILATOR_TEST_RESULTS.md](VERILATOR_TEST_RESULTS.md). Timestep sensitivity
@@ -17,10 +18,13 @@ FlexPRET-specific moving-dipole EGM design, lookup-table rationale, timestep
 change procedure, and differences from `iccnet-core` are documented in
 [EGM_DESIGN.md](EGM_DESIGN.md). The preliminary audit of the previous FlexPRET
 HEPTANE extension is recorded in
-[HEPTANE_FLEXPRET_AUDIT.md](HEPTANE_FLEXPRET_AUDIT.md). The implemented
-one-path lookup generator and its independent 370-sample `iccnet-core`
-comparison are reported in
-[EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md).
+[HEPTANE_FLEXPRET_AUDIT.md](HEPTANE_FLEXPRET_AUDIT.md). The lookup generator,
+its independent 370-sample path-0 `iccnet-core` comparison, and the four-path
+extension are reported in [EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md).
+End-to-end target integration results are in
+[EGM_RUNTIME_VALIDATION.md](EGM_RUNTIME_VALIDATION.md). The five-electrode
+waveform comparison, numerical results, and reusable CSV schema are documented
+in [EGM_FIVE_ELECTRODE_RESULTS.md](EGM_FIVE_ELECTRODE_RESULTS.md).
 
 ## How FPGA Loading Works
 
@@ -97,13 +101,17 @@ but does not erase the FPGA configuration.
 ## 2. Build the ICC Application
 
 Use a dedicated FPGA build directory so FPGA objects and linker configuration
-are not mixed with the emulator build:
+are not mixed with the emulator build. The `generated/` directory is
+deliberately excluded from Git: `tools/generate_egm_lut.c` and its configuration
+are the source of truth. Generate the tables after every clone or pull and
+before configuring CMake:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges
 source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
+./tools/generate_egm_luts.sh
 cmake -B build-fpga
 cmake --build build-fpga --target icc-model
 ```
@@ -117,6 +125,11 @@ apps/icc-model/bin/icc-model
 
 The `.mem` file is the compiled application. `bin/icc-model` is the generated
 UART flash-and-console launcher.
+
+`generate_egm_luts.sh` replaces the generated directory only after the host
+generator succeeds. It also writes `GENERATION_SHA256SUMS.txt`, containing the
+generator-source hash and the hash of every output. CMake stops with the exact
+generation command if the table selected by `ICC_MODEL_TIMESTEP_MS` is absent.
 
 ## 3. Connect the USB-UART Adapter
 
@@ -207,6 +220,7 @@ source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
 rm -rf build-fpga
+./tools/generate_egm_luts.sh
 cmake -B build-fpga
 cmake --build build-fpga --target icc-model
 ```
@@ -241,6 +255,7 @@ export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 export FP_SDK_FPGA_FLASH_DEVICE=/dev/ttyUSB1
 cd apps/icc-model
 rm -rf build-fpga
+./tools/generate_egm_luts.sh
 cmake -B build-fpga
 cmake --build build-fpga --target icc-model
 ./bin/icc-model
@@ -397,6 +412,7 @@ cd /home/eugene/gastric-pacemaker/fp-ges
 source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
+./tools/generate_egm_luts.sh
 cmake -B build-emu -DTARGET=emulator
 cmake --build build-emu --target icc-model
 ./bin/icc-model-emu
@@ -415,14 +431,26 @@ available with:
 fp-emu --hwconfig
 ```
 
-## 6. Run the Host Test
+## 6. Run the Host Tests
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
 gcc -std=c11 -Wall -Wextra -Werror -Iinc \
     src/icc.c src/path.c src/network.c tests/test_icc.c -o /tmp/icc-model-test
 /tmp/icc-model-test
+./tools/generate_egm_luts.sh
+./tools/run_egm_lut_tests.sh
+./tools/run_egm_runtime_tests.sh
 ```
+
+The EGM runtime test selects each supported table in turn and drives the real
+path state machine in both propagation directions. To print one EGM sample per
+step in a finite Verilator scenario, configure with
+`-DICC_VERILATOR_EGM_TRACE=ON`.
+
+The lookup-generator test creates two independent temporary outputs and
+requires them to match byte-for-byte. It therefore tests deterministic
+generation without relying on committed generated files.
 
 ## Target Configuration Reference
 
@@ -433,7 +461,11 @@ gcc -std=c11 -Wall -Wextra -Werror -Iinc \
 - FPGA and emulator builds use separate build directories.
 - `bin/icc-model` is the FPGA launcher.
 - `bin/icc-model-emu` is the emulator launcher.
-- Five cells and four bidirectional paths are included; EGM is not implemented.
+- Five cells, four bidirectional paths, and one fixed-electrode EGM output are
+  included.
+- The EGM table configuration currently requires 1000 ms path delays and 6 mm
+  gaps. Regenerate the tables when the timestep, path delay, spacing, electrode
+  geometry, dipole parameters, integer scale, or generator algorithm changes.
 
 ## Short Version
 
@@ -453,6 +485,7 @@ cd /home/eugene/gastric-pacemaker/fp-ges
 source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
+./tools/generate_egm_luts.sh
 cmake -B build-fpga
 cmake --build build-fpga --target icc-model
 

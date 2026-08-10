@@ -26,6 +26,10 @@ _Static_assert(EGM_LUT_DELAY_MS % EGM_LUT_TIMESTEP_MS == 0U,
 _Static_assert(EGM_LUT_STEP_COUNT ==
     EGM_LUT_DELAY_MS / EGM_LUT_TIMESTEP_MS,
     "step count must match delay divided by timestep");
+_Static_assert(EGM_LUT_CELL_COUNT == 5U,
+    "lookup must describe the five-cell network");
+_Static_assert(EGM_LUT_PATH_COUNT == 4U,
+    "lookup must contain all four paths");
 _Static_assert(EGM_LUT_SCALE == 10000000,
     "all supported timesteps must use one common EGM scale");
 
@@ -33,14 +37,18 @@ int main(void)
 {
     int64_t maximum_magnitude = 0;
 
-    for (uint32_t direction = 0U; direction < 2U; ++direction) {
-        for (uint32_t step = 0U; step < EGM_LUT_STEP_COUNT; ++step) {
-            int64_t value = kEgmPath0Lookup[direction][step];
-            if (value < 0) {
-                value = -value;
-            }
-            if (value > maximum_magnitude) {
-                maximum_magnitude = value;
+    for (uint32_t path = 0U; path < EGM_LUT_PATH_COUNT; ++path) {
+        for (uint32_t direction = 0U;
+             direction < EGM_LUT_DIRECTION_COUNT;
+             ++direction) {
+            for (uint32_t step = 0U; step < EGM_LUT_STEP_COUNT; ++step) {
+                int64_t value = kEgmPathLookup[path][direction][step];
+                if (value < 0) {
+                    value = -value;
+                }
+                if (value > maximum_magnitude) {
+                    maximum_magnitude = value;
+                }
             }
         }
     }

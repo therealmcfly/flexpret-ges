@@ -1,15 +1,16 @@
-# One-Path EGM Lookup Generator Validation
+# Five-Cell EGM Lookup Generator Validation
 
 Date: 2026-08-09
 
 ## Scope
 
-This report validates the first EGM implementation milestone: the host-side
-lookup-table generator. It does not validate an EGM runtime on FlexPRET.
+This report validates the host-side lookup-table generator. Runtime validation
+is reported separately in `EGM_RUNTIME_VALIDATION.md`.
 
 The reference configuration is:
 
-- one horizontal path from `(0, 0)` to `(6, 0)` mm;
+- five cells from `(0, 0)` through `(24, 0)` mm;
+- four adjacent, horizontal, 6 mm paths;
 - 1000 ms propagation delay;
 - both A-to-B and B-to-A propagation;
 - one electrode at grid row 0, column 1, height 1 mm;
@@ -24,7 +25,10 @@ The reference configuration is:
 - a CSV containing every reference and quantized sample; and
 - one combined Markdown range and error report.
 
-The committed proof artifacts are under `generated/egm_1path/`.
+Reproducible proof artifacts are created under `generated/egm_1d5c/`. The
+directory is deliberately ignored by Git; the generator source, its fixed
+configuration, and the generation procedure are the source of truth. Across
+all timesteps the tables contain 1480 path/direction/progress samples.
 
 ## Common integer scale
 
@@ -43,9 +47,9 @@ limit of `2,147,483,647`.
 Across all tables, the maximum absolute conversion error was less than
 `5.0e-8` model potential units.
 
-## Independent `iccnet-core` comparison
+## Independent `iccnet-core` comparison of path 0
 
-The generator was compared with the actual EGM implementation from private
+The original path-0 generator was compared with the actual EGM implementation from private
 repository `therealmcfly/iccnet-core`, commit:
 
 ```text
@@ -78,7 +82,10 @@ maximum dipole-position difference=0
 ```
 
 The printed single-precision dipole positions and potentials therefore matched
-`iccnet-core` exactly for this reference configuration.
+`iccnet-core` exactly for path 0. The four-path generator applies the same
+validated operation order independently at the translated x coordinates of
+paths 1, 2, and 3. This report does not claim a new direct `iccnet-core`
+comparison for those three translated paths.
 
 ## Deterministic-generation test
 
@@ -96,17 +103,23 @@ Run:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+./tools/generate_egm_luts.sh
 ./tools/run_egm_lut_tests.sh
 ```
 
 The script:
 
 1. compiles the host generator with warnings treated as errors;
-2. regenerates all artifacts in a temporary directory;
-3. checks that regeneration exactly matches the committed artifacts;
+2. generates all artifacts independently in two temporary directories;
+3. checks that the two generations match byte-for-byte;
 4. compiles every generated header independently;
-5. verifies timestep, delay, step-count, and common-scale metadata; and
+5. verifies timestep, cell-count, path-count, delay, step-count, and
+   common-scale metadata; and
 6. verifies conservative four-path signed 32-bit range.
+
+The separate generation command installs a successful generation into the
+application's ignored `generated/` directory and records the generator-source
+and output hashes in `GENERATION_SHA256SUMS.txt`.
 
 Expected result:
 
@@ -116,13 +129,9 @@ EGM lookup generator tests passed
 
 ## Current limitations
 
-- Only one path and one electrode are generated.
+- Four paths and one electrode are generated.
 - The reference geometry is fixed as constants in the generator source.
-- The generated tables are not yet selected by the FlexPRET build.
-- The FlexPRET path does not yet expose a dedicated progress index.
-- No target EGM accumulation code exists.
-- No Verilator, DE1-SoC, symbol, memory-map, or HEPTANE EGM result is claimed.
-
-The next milestone is to generalize the generator to all four paths using one
-canonical configuration, then add the small integer progress index and the
-table-only FlexPRET EGM accumulator.
+- The direct `iccnet-core` comparison currently covers path 0 only.
+- Changing path delay, gap, electrode geometry, or EGM parameters requires
+  regeneration.
+- No physical DE1-SoC or HEPTANE EGM result is claimed yet.

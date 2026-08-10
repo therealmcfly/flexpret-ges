@@ -30,6 +30,7 @@ typedef enum {
 typedef struct {
     IccPathState state;
     uint32_t elapsed_ms;
+    uint16_t progress_step;
     int32_t active_time_ms[2];
     uint16_t delay_ms;
     uint8_t gap_mm;

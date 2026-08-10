@@ -1,7 +1,9 @@
 # FlexPRET EGM Design Plan
 
-Status: the one-path host lookup generator is implemented and independently
-validated; no FlexPRET EGM runtime has been implemented yet.
+Status: the generator now emits all four path tables and the first FlexPRET
+integer lookup-and-sum runtime is integrated and tested. One path was compared
+directly with `iccnet-core`; all four paths use the same equation at their
+translated network coordinates.
 
 ## 1. Purpose and scope
 
@@ -21,23 +23,29 @@ The initial scope is deliberately fixed:
 Multiple electrodes, a two-dimensional network, runtime geometry changes, and
 arbitrarily varying path gaps are later stages.
 
-### Implemented generator milestone
+### Implemented generator and runtime milestone
 
-The first generator milestone is available in `tools/generate_egm_lut.c`. It
-generates both directions of one 6 mm, 1000 ms path for one electrode at every
-supported timestep. Generated headers, CSV files, and the numerical report are
-stored under `generated/egm_1path/`.
+The generator is available in `tools/generate_egm_lut.c`. It generates both
+directions of all four 6 mm, 1000 ms paths for one electrode at every supported
+timestep. Generated headers, CSV files, the numerical report, and a checksum
+manifest are recreated under `generated/egm_1d5c/`. This directory is ignored
+by Git; the generator source and configuration are the reproducible source of
+truth.
 
 Run the reproducible generator test with:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+./tools/generate_egm_luts.sh
 ./tools/run_egm_lut_tests.sh
+./tools/run_egm_runtime_tests.sh
 ```
 
-The generated floating samples matched the actual `iccnet-core` implementation
-at all 370 tested path states. The validation evidence and current limitations
-are recorded in [EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md).
+The original path-0 floating samples matched the actual `iccnet-core`
+implementation at all 370 tested path states. The runtime now selects and sums
+the four path-specific tables. The numerical and target integration evidence
+is recorded in [EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md) and
+[EGM_RUNTIME_VALIDATION.md](EGM_RUNTIME_VALIDATION.md).
 
 ## 2. Reference `iccnet-core` EGM model
 
@@ -156,12 +164,12 @@ the physiological accuracy of the underlying dipole model.
 
 ## 6. Runtime structure
 
-The path model will expose a small integer progress index. It is set to zero
+The path model exposes a small integer progress index. It is set to zero
 when propagation starts, incremented once per model update, and reset when the
 path becomes inactive. This avoids calculating `elapsed_ms / timestep_ms` on
 FlexPRET.
 
-The first EGM implementation will be manually unrolled:
+The first EGM implementation is manually unrolled:
 
 ```c
 IccEgmValue egm_1d5c_compute(const IccNetwork1d *network)
@@ -228,8 +236,8 @@ For a supported timestep change:
 2. Confirm that every path delay is greater than the timestep and is an exact
    multiple of it.
 3. Use the existing ICC resting-increment calibration entry for that timestep.
-4. Generate or select the EGM lookup table for the same timestep and network
-   configuration.
+4. Run `./tools/generate_egm_luts.sh` to recreate all supported EGM lookup
+   tables for the network configuration.
 5. Build in a separate timestep-specific build directory to prevent stale
    objects or tables.
 6. Run the host ICC, path, network, EGM, and reference-comparison tests.
@@ -254,10 +262,13 @@ Compilation must fail when the table metadata does not match
 `ICC_TIMESTEP_MS`, the network dimensions, or the configured geometry. This
 prevents accidentally testing one timestep with another timestep's table.
 
-If all five canonical tables are generated and committed in advance, changing
-only the timestep can select the matching table automatically. Regeneration is
-still required after changing path delays, spacing, electrode geometry, EGM
-parameters, the integer scale, or the generator algorithm.
+All five canonical tables are generated together, so changing only the
+timestep selects the matching generated table automatically after generation.
+The generation step is mandatory after cloning or pulling because the output
+directory is not committed. It is also required after changing path delays,
+spacing, electrode geometry, EGM parameters, the integer scale, or the
+generator algorithm. `GENERATION_SHA256SUMS.txt` records the exact generator
+source hash and output hashes used for a build or experiment.
 
 Changing only cell intrinsic intervals or pacemaker locations does not require
 a new EGM table. Those values control when propagation begins, not the

@@ -1,16 +1,15 @@
 /*
- * Host-side generator for the first FlexPRET EGM lookup-table milestone.
+ * Host-side generator for the five-cell FlexPRET EGM lookup tables.
  *
  * This program intentionally uses the same single-precision operation order
  * as iccnet-core/src/egm.c. It is a development tool, not target code.
  *
- * Initial reference configuration:
- *   path A (0, 0) -> B (6, 0) mm
+ * Reference configuration:
+ *   five cells at x = 0, 6, 12, 18, and 24 mm
+ *   four adjacent bidirectional paths with 1000 ms delay
  *   delay 1000 ms
  *   electrode at grid row 0, column 1, height 1 mm
  *   dipole parameters 18.0, 1.0, 0.1
- *
- * It generates lookup headers and CSV evidence for all supported timesteps.
  */
 
 #include <errno.h>
@@ -22,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define EGM_CELL_COUNT 5U
+#define EGM_PATH_COUNT (EGM_CELL_COUNT - 1U)
 #define EGM_PATH_DELAY_MS 1000U
 #define EGM_PATH_GAP_MM 6U
 #define EGM_ELECTRODE_ROW 0U
@@ -36,7 +37,7 @@
 #define EGM_DIRECTION_COUNT 2U
 #define EGM_DIRECTION_A_TO_B 0U
 #define EGM_DIRECTION_B_TO_A 1U
-#define EGM_MAX_SIMULTANEOUS_PATHS 4U
+#define EGM_MAX_SIMULTANEOUS_PATHS EGM_PATH_COUNT
 #define EGM_SCALE_HEADROOM 0.80
 
 typedef struct {
@@ -59,13 +60,15 @@ static const uint32_t kSupportedTimestepsMs[] = {
 };
 
 static EgmReferenceSample reference_sample(
+    uint32_t path_index,
+    uint32_t electrode_col,
     uint32_t direction,
     uint32_t elapsed_ms)
 {
     const float gap_mm = (float)EGM_PATH_GAP_MM;
-    const float a_x_mm = 0.0f;
+    const float a_x_mm = (float)path_index * gap_mm;
     const float a_y_mm = 0.0f;
-    const float b_x_mm = gap_mm;
+    const float b_x_mm = (float)(path_index + 1U) * gap_mm;
     const float b_y_mm = 0.0f;
     const float start_x_mm = direction == EGM_DIRECTION_A_TO_B
         ? a_x_mm : b_x_mm;
@@ -95,7 +98,7 @@ static EgmReferenceSample reference_sample(
     sample.dipole_y_mm = start_y_mm + travelled_mm * direction_y;
 
     const float electrode_x_mm =
-        (float)EGM_ELECTRODE_COL * gap_mm;
+        (float)electrode_col * gap_mm;
     const float electrode_y_mm =
         (float)EGM_ELECTRODE_ROW * gap_mm;
     const float electrode_dx = electrode_x_mm - sample.dipole_x_mm;
@@ -196,15 +199,20 @@ static float find_maximum_absolute_reference(void)
         }
 
         const uint32_t step_count = EGM_PATH_DELAY_MS / timestep_ms;
-        for (uint32_t direction = 0U;
-             direction < EGM_DIRECTION_COUNT;
-             ++direction) {
-            for (uint32_t step = 0U; step < step_count; ++step) {
-                const EgmReferenceSample sample = reference_sample(
-                    direction, step * timestep_ms);
-                const float magnitude = fabsf(sample.potential);
-                if (magnitude > maximum) {
-                    maximum = magnitude;
+        for (uint32_t path_index = 0U;
+             path_index < EGM_PATH_COUNT;
+             ++path_index) {
+            for (uint32_t direction = 0U;
+                 direction < EGM_DIRECTION_COUNT;
+                 ++direction) {
+                for (uint32_t step = 0U; step < step_count; ++step) {
+                    const EgmReferenceSample sample = reference_sample(
+                        path_index, EGM_ELECTRODE_COL,
+                        direction, step * timestep_ms);
+                    const float magnitude = fabsf(sample.potential);
+                    if (magnitude > maximum) {
+                        maximum = magnitude;
+                    }
                 }
             }
         }
@@ -260,15 +268,20 @@ static void write_header(
         "#define EGM_LUT_ELECTRODE_ROW %uU\n"
         "#define EGM_LUT_ELECTRODE_COL %uU\n"
         "#define EGM_LUT_ELECTRODE_HEIGHT_MM %uU\n"
+        "#define EGM_LUT_CELL_COUNT %uU\n"
+        "#define EGM_LUT_PATH_COUNT %uU\n"
+        "#define EGM_LUT_DIRECTION_COUNT %uU\n"
         "#define EGM_LUT_STEP_COUNT %uU\n"
         "#define EGM_LUT_SCALE %d\n"
         "#define EGM_LUT_DIRECTION_A_TO_B 0U\n"
         "#define EGM_LUT_DIRECTION_B_TO_A 1U\n\n"
-        "static const int32_t kEgmPath0Lookup[2][%u] = {\n",
+        "static const int32_t kEgmPathLookup[%u][%u][%u] = {\n",
         timestep_ms, timestep_ms,
         timestep_ms, EGM_PATH_DELAY_MS, EGM_PATH_GAP_MM,
         EGM_ELECTRODE_ROW, EGM_ELECTRODE_COL,
-        EGM_ELECTRODE_HEIGHT_MM, step_count, scale, step_count);
+        EGM_ELECTRODE_HEIGHT_MM, EGM_CELL_COUNT, EGM_PATH_COUNT,
+        EGM_DIRECTION_COUNT, step_count, scale, EGM_PATH_COUNT,
+        EGM_DIRECTION_COUNT, step_count);
 
     statistics->timestep_ms = timestep_ms;
     statistics->step_count = step_count;
@@ -278,43 +291,50 @@ static void write_header(
     double squared_error_sum = 0.0;
     uint32_t sample_count = 0U;
 
-    for (uint32_t direction = 0U;
-         direction < EGM_DIRECTION_COUNT;
-         ++direction) {
-        fprintf(output, "    { /* %s */\n        ",
-            direction == EGM_DIRECTION_A_TO_B ? "A to B" : "B to A");
+    for (uint32_t path_index = 0U;
+         path_index < EGM_PATH_COUNT;
+         ++path_index) {
+        fprintf(output, "    { /* path %u */\n", path_index);
+        for (uint32_t direction = 0U;
+             direction < EGM_DIRECTION_COUNT;
+             ++direction) {
+            fprintf(output, "        { /* %s */\n            ",
+                direction == EGM_DIRECTION_A_TO_B ? "A to B" : "B to A");
 
-        for (uint32_t step = 0U; step < step_count; ++step) {
-            const EgmReferenceSample sample = reference_sample(
-                direction, step * timestep_ms);
-            const int32_t integer_value = quantize(sample.potential, scale);
-            const double reconstructed =
-                (double)integer_value / (double)scale;
-            const double error =
-                reconstructed - (double)sample.potential;
-            const double absolute_error = fabs(error);
+            for (uint32_t step = 0U; step < step_count; ++step) {
+                const EgmReferenceSample sample = reference_sample(
+                    path_index, EGM_ELECTRODE_COL,
+                    direction, step * timestep_ms);
+                const int32_t integer_value = quantize(sample.potential, scale);
+                const double reconstructed =
+                    (double)integer_value / (double)scale;
+                const double error =
+                    reconstructed - (double)sample.potential;
+                const double absolute_error = fabs(error);
 
-            if (sample.potential < statistics->minimum_potential) {
-                statistics->minimum_potential = sample.potential;
-            }
-            if (sample.potential > statistics->maximum_potential) {
-                statistics->maximum_potential = sample.potential;
-            }
-            if (absolute_error > statistics->maximum_absolute_error) {
-                statistics->maximum_absolute_error = absolute_error;
-            }
-            squared_error_sum += error * error;
-            ++sample_count;
+                if (sample.potential < statistics->minimum_potential) {
+                    statistics->minimum_potential = sample.potential;
+                }
+                if (sample.potential > statistics->maximum_potential) {
+                    statistics->maximum_potential = sample.potential;
+                }
+                if (absolute_error > statistics->maximum_absolute_error) {
+                    statistics->maximum_absolute_error = absolute_error;
+                }
+                squared_error_sum += error * error;
+                ++sample_count;
 
-            fprintf(output, "%d", integer_value);
-            if (step + 1U != step_count) {
-                fprintf(output, ",%s",
-                    (step + 1U) % 8U == 0U ? "\n        " : " ");
+                fprintf(output, "%d", integer_value);
+                if (step + 1U != step_count) {
+                    fprintf(output, ",%s", (step + 1U) % 8U == 0U
+                        ? "\n            " : " ");
+                }
             }
+            fprintf(output, "\n        }%s\n", direction + 1U ==
+                EGM_DIRECTION_COUNT ? "" : ",");
         }
-
-        fprintf(output, "\n    }%s\n",
-            direction + 1U == EGM_DIRECTION_COUNT ? "" : ",");
+        fprintf(output, "    }%s\n",
+            path_index + 1U == EGM_PATH_COUNT ? "" : ",");
     }
 
     statistics->rmse = sqrt(
@@ -338,37 +358,161 @@ static void write_csv(
         output_directory, filename, output_path, sizeof(output_path));
 
     fprintf(output,
-        "timestep_ms,direction,progress_step,elapsed_ms,"
+        "timestep_ms,path_index,direction,progress_step,elapsed_ms,"
         "dipole_x_mm,dipole_y_mm,reference_potential,integer_value,"
         "reconstructed_potential,error,absolute_error\n");
 
     const uint32_t step_count = EGM_PATH_DELAY_MS / timestep_ms;
-    for (uint32_t direction = 0U;
-         direction < EGM_DIRECTION_COUNT;
-         ++direction) {
-        for (uint32_t step = 0U; step < step_count; ++step) {
-            const uint32_t elapsed_ms = step * timestep_ms;
-            const EgmReferenceSample sample = reference_sample(
-                direction, elapsed_ms);
-            const int32_t integer_value = quantize(sample.potential, scale);
-            const double reconstructed =
-                (double)integer_value / (double)scale;
-            const double error =
-                reconstructed - (double)sample.potential;
+    for (uint32_t path_index = 0U;
+         path_index < EGM_PATH_COUNT;
+         ++path_index) {
+        for (uint32_t direction = 0U;
+             direction < EGM_DIRECTION_COUNT;
+             ++direction) {
+            for (uint32_t step = 0U; step < step_count; ++step) {
+                const uint32_t elapsed_ms = step * timestep_ms;
+                const EgmReferenceSample sample = reference_sample(
+                    path_index, EGM_ELECTRODE_COL,
+                    direction, elapsed_ms);
+                const int32_t integer_value = quantize(sample.potential, scale);
+                const double reconstructed =
+                    (double)integer_value / (double)scale;
+                const double error =
+                    reconstructed - (double)sample.potential;
 
-            fprintf(output,
-                "%u,%s,%u,%u,%.9g,%.9g,%.9g,%d,%.12g,%.12g,%.12g\n",
-                timestep_ms,
-                direction == EGM_DIRECTION_A_TO_B ? "A_TO_B" : "B_TO_A",
-                step, elapsed_ms,
-                sample.dipole_x_mm, sample.dipole_y_mm,
-                sample.potential, integer_value, reconstructed,
-                error, fabs(error));
+                fprintf(output,
+                    "%u,%u,%s,%u,%u,%.9g,%.9g,%.9g,%d,%.12g,%.12g,%.12g\n",
+                    timestep_ms, path_index,
+                    direction == EGM_DIRECTION_A_TO_B ? "A_TO_B" : "B_TO_A",
+                    step, elapsed_ms,
+                    sample.dipole_x_mm, sample.dipole_y_mm,
+                    sample.potential, integer_value, reconstructed,
+                    error, fabs(error));
+            }
         }
     }
 
     fclose(output);
     printf("generated %s\n", output_path);
+}
+
+static void write_five_electrode_waveform_data(
+    const char *output_directory,
+    int32_t scale)
+{
+    char waveform_path[512];
+    char summary_path[512];
+    FILE *waveform = open_output(
+        output_directory,
+        "egm_five_electrode_waveforms.csv",
+        waveform_path,
+        sizeof(waveform_path));
+    FILE *summary = open_output(
+        output_directory,
+        "egm_five_electrode_summary.csv",
+        summary_path,
+        sizeof(summary_path));
+
+    fprintf(waveform,
+        "timestep_ms,electrode_cell,electrode_col,electrode_x_mm,time_ms,"
+        "path_index,path_cell_a,path_cell_b,path_elapsed_ms,direction,"
+        "reference_potential,scaled_integer,reconstructed_potential,"
+        "quantization_error\n");
+    fprintf(summary,
+        "timestep_ms,electrode_cell,sample_count,minimum_potential,"
+        "minimum_time_ms,maximum_potential,maximum_time_ms,"
+        "peak_absolute_potential,peak_absolute_time_ms\n");
+
+    for (size_t timestep_index = 0U;
+         timestep_index < sizeof(kSupportedTimestepsMs) /
+             sizeof(kSupportedTimestepsMs[0]);
+         ++timestep_index) {
+        const uint32_t timestep_ms =
+            kSupportedTimestepsMs[timestep_index];
+        const uint32_t duration_ms =
+            EGM_PATH_COUNT * EGM_PATH_DELAY_MS;
+
+        for (uint32_t electrode_col = 0U;
+             electrode_col < EGM_CELL_COUNT;
+             ++electrode_col) {
+            float minimum = INFINITY;
+            float maximum = -INFINITY;
+            float peak_absolute = 0.0f;
+            uint32_t minimum_time_ms = 0U;
+            uint32_t maximum_time_ms = 0U;
+            uint32_t peak_absolute_time_ms = 0U;
+            uint32_t sample_count = 0U;
+
+            for (uint32_t time_ms = 0U;
+                 time_ms < duration_ms;
+                 time_ms += timestep_ms) {
+                const uint32_t path_index =
+                    time_ms / EGM_PATH_DELAY_MS;
+                const uint32_t path_elapsed_ms =
+                    time_ms % EGM_PATH_DELAY_MS;
+                const EgmReferenceSample sample = reference_sample(
+                    path_index,
+                    electrode_col,
+                    EGM_DIRECTION_A_TO_B,
+                    path_elapsed_ms);
+                const int32_t integer_value =
+                    quantize(sample.potential, scale);
+                const double reconstructed =
+                    (double)integer_value / (double)scale;
+                const double error =
+                    reconstructed - (double)sample.potential;
+                const float absolute = fabsf(sample.potential);
+
+                if (sample.potential < minimum) {
+                    minimum = sample.potential;
+                    minimum_time_ms = time_ms;
+                }
+                if (sample.potential > maximum) {
+                    maximum = sample.potential;
+                    maximum_time_ms = time_ms;
+                }
+                if (absolute > peak_absolute) {
+                    peak_absolute = absolute;
+                    peak_absolute_time_ms = time_ms;
+                }
+
+                fprintf(waveform,
+                    "%u,%u,%u,%u,%u,%u,%u,%u,%u,A_TO_B,"
+                    "%.9g,%d,%.12g,%.12g\n",
+                    timestep_ms,
+                    electrode_col + 1U,
+                    electrode_col,
+                    electrode_col * EGM_PATH_GAP_MM,
+                    time_ms,
+                    path_index,
+                    path_index + 1U,
+                    path_index + 2U,
+                    path_elapsed_ms,
+                    sample.potential,
+                    integer_value,
+                    reconstructed,
+                    error);
+                ++sample_count;
+            }
+
+            fprintf(summary,
+                "%u,%u,%u,%.9g,%u,%.9g,%u,%.9g,%u\n",
+                timestep_ms,
+                electrode_col + 1U,
+                sample_count,
+                minimum,
+                minimum_time_ms,
+                maximum,
+                maximum_time_ms,
+                peak_absolute,
+                peak_absolute_time_ms);
+        }
+    }
+
+    fclose(waveform);
+    fclose(summary);
+    printf("generated %s\n", waveform_path);
+    printf("generated %s\n", summary_path);
 }
 
 static void write_report(
@@ -390,10 +534,11 @@ static void write_report(
         maximum_single_integer * (double)EGM_MAX_SIMULTANEOUS_PATHS;
 
     fprintf(output,
-        "# One-Path EGM Lookup Generation Report\n\n"
+        "# Five-Cell 1D EGM Lookup Generation Report\n\n"
         "Generated by `tools/generate_egm_lut.c`.\n\n"
         "## Reference configuration\n\n"
-        "- Path: A `(0, 0)` to B `(%u, 0)` mm\n"
+        "- Cells: %u at x = 0 through %u mm\n"
+        "- Paths: %u adjacent bidirectional paths, each %u mm\n"
         "- Path delay: %u ms\n"
         "- Electrode: row %u, column %u, height %u mm\n"
         "- Dipole moment: %.9g\n"
@@ -409,10 +554,11 @@ static void write_report(
         "The same scale is used for all timesteps so their integer outputs are "
         "directly comparable.\n\n"
         "## Per-timestep results\n\n"
-        "| Timestep | Steps/direction | Samples | Minimum | Maximum | "
+        "| Timestep | Steps/path/direction | Samples | Minimum | Maximum | "
         "Maximum absolute quantization error | RMSE |\n"
         "|---:|---:|---:|---:|---:|---:|---:|\n",
-        EGM_PATH_GAP_MM, EGM_PATH_DELAY_MS,
+        EGM_CELL_COUNT, (EGM_CELL_COUNT - 1U) * EGM_PATH_GAP_MM,
+        EGM_PATH_COUNT, EGM_PATH_GAP_MM, EGM_PATH_DELAY_MS,
         EGM_ELECTRODE_ROW, EGM_ELECTRODE_COL,
         EGM_ELECTRODE_HEIGHT_MM,
         EGM_DIPOLE_MOMENT, EGM_LONGITUDINAL_WEIGHT,
@@ -427,7 +573,7 @@ static void write_report(
             "| %u ms | %u | %u | %.9g | %.9g | %.12g | %.12g |\n",
             entry->timestep_ms,
             entry->step_count,
-            entry->step_count * EGM_DIRECTION_COUNT,
+            entry->step_count * EGM_DIRECTION_COUNT * EGM_PATH_COUNT,
             entry->minimum_potential,
             entry->maximum_potential,
             entry->maximum_absolute_error,
@@ -437,8 +583,9 @@ static void write_report(
     fprintf(output,
         "\n## Interpretation\n\n"
         "The tables contain every propagation state reachable before relay "
-        "for the selected path delay. The 10 ms table contains more temporal "
-        "samples than the 200 ms table, but all tables represent the same "
+        "for all four paths at the selected path delay. The 10 ms table "
+        "contains more temporal samples than the 200 ms table, but all "
+        "tables represent the same "
         "continuous moving-dipole equation at their respective sample times.\n"
         "The reported error is only the conversion from the single-precision "
         "reference potential to the common signed-integer scale.\n");
@@ -475,6 +622,8 @@ int main(int argc, char **argv)
         write_header(argv[1], timestep_ms, scale, &statistics[index]);
         write_csv(argv[1], timestep_ms, scale);
     }
+
+    write_five_electrode_waveform_data(argv[1], scale);
 
     write_report(
         argv[1],

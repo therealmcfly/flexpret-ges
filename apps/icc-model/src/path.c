@@ -37,6 +37,7 @@ void icc_path_init(
 
     path->state = ICC_PATH_IDLE;
     path->elapsed_ms = 0U;
+    path->progress_step = 0U;
     clear_active_times(path);
     path->delay_ms = delay_ms > 0U
         ? delay_ms : ICC_PATH_DEFAULT_DELAY_MS;
@@ -58,14 +59,17 @@ void icc_path_step(IccPath *path)
     case ICC_PATH_IDLE:
         if (icc_is_active(path->cell_a) &&
             icc_is_active(path->cell_b)) {
+            path->progress_step = 0U;
             path->state = ICC_PATH_ANNIHILATE;
         } else if (icc_is_active(path->cell_a)) {
             path->elapsed_ms = 0U;
+            path->progress_step = 0U;
             path->active_time_ms[0] = 0;
             path->active_time_ms[1] = ICC_PATH_INACTIVE_TIME_MS;
             path->state = ICC_PATH_CELL_A_WAIT;
         } else if (icc_is_active(path->cell_b)) {
             path->elapsed_ms = 0U;
+            path->progress_step = 0U;
             path->active_time_ms[0] = ICC_PATH_INACTIVE_TIME_MS;
             path->active_time_ms[1] = 0;
             path->state = ICC_PATH_CELL_B_WAIT;
@@ -77,12 +81,14 @@ void icc_path_step(IccPath *path)
             !icc_is_active(path->cell_b)) {
             path->state = ICC_PATH_IDLE;
             path->elapsed_ms = 0U;
+            path->progress_step = 0U;
             clear_active_times(path);
         }
         break;
 
     case ICC_PATH_CELL_A_WAIT:
         path->elapsed_ms += ICC_TIMESTEP_MS;
+        path->progress_step++;
         path->active_time_ms[0] = (int32_t)path->elapsed_ms;
         if (relay_is_due_next_step(path)) {
             icc_stimulate(path->cell_b);
@@ -93,11 +99,13 @@ void icc_path_step(IccPath *path)
     case ICC_PATH_CELL_A_RELAY:
         path->state = ICC_PATH_IDLE;
         path->elapsed_ms = 0U;
+        path->progress_step = 0U;
         clear_active_times(path);
         break;
 
     case ICC_PATH_CELL_B_WAIT:
         path->elapsed_ms += ICC_TIMESTEP_MS;
+        path->progress_step++;
         path->active_time_ms[1] = (int32_t)path->elapsed_ms;
         if (relay_is_due_next_step(path)) {
             icc_stimulate(path->cell_a);
@@ -108,12 +116,14 @@ void icc_path_step(IccPath *path)
     case ICC_PATH_CELL_B_RELAY:
         path->state = ICC_PATH_IDLE;
         path->elapsed_ms = 0U;
+        path->progress_step = 0U;
         clear_active_times(path);
         break;
 
     default:
         path->state = ICC_PATH_IDLE;
         path->elapsed_ms = 0U;
+        path->progress_step = 0U;
         clear_active_times(path);
         break;
     }
