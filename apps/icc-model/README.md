@@ -12,7 +12,15 @@ Design details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The 40-case
 pacemaker-location and path-delay campaign is reported in
 [VERILATOR_TEST_RESULTS.md](VERILATOR_TEST_RESULTS.md). Timestep sensitivity
 from 200 ms down to 10 ms is reported in
-[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md).
+[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md). The proposed
+FlexPRET-specific moving-dipole EGM design, lookup-table rationale, timestep
+change procedure, and differences from `iccnet-core` are documented in
+[EGM_DESIGN.md](EGM_DESIGN.md). The preliminary audit of the previous FlexPRET
+HEPTANE extension is recorded in
+[HEPTANE_FLEXPRET_AUDIT.md](HEPTANE_FLEXPRET_AUDIT.md). The implemented
+one-path lookup generator and its independent 370-sample `iccnet-core`
+comparison are reported in
+[EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md).
 
 ## How FPGA Loading Works
 
