@@ -261,4 +261,3 @@ The future feature is ready only when:
 - all host, Verilator, FPGA, timing, memory, and telemetry checks pass;
 - documentation distinguishes simulated evidence from physical board evidence;
 - Cell 5 boundary behaviour is explicitly retained or separately redesigned.
-
