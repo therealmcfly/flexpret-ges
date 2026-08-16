@@ -245,6 +245,11 @@ displayed; it must not modify `IccEgm.electrode_position_units`. Conversely,
 moving the EGM electrode changes only the EGM coordinate and does not select an
 ICC telemetry channel.
 
+The FPGA application currently computes one EGM electrode per execution. A
+future, optional five-channel design is recorded in
+`MULTI_ELECTRODE_FUTURE_DESIGN.md`. It preserves the single 801-entry LUT and
+the current single-electrode mode, but has not been implemented or validated.
+
 ## CSV columns
 
 The generated `egm_relative_lut.csv` contains:
