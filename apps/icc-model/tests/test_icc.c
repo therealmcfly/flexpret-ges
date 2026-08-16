@@ -247,7 +247,49 @@ static void test_path_annihilates_simultaneous_activation(void)
     cell_a.state = ICC_Q2_PLATEAU;
     cell_b.state = ICC_Q2_PLATEAU;
     icc_path_step(&path);
+    assert(path.state == ICC_PATH_ANNIHILATE);
+
+    cell_a.state = ICC_Q0_RESTING;
+    cell_b.state = ICC_Q0_RESTING;
+    icc_path_step(&path);
     assert(path.state == ICC_PATH_IDLE);
+}
+
+static void test_active_states_match_iccnet_core(void)
+{
+    Icc cell;
+
+    icc_init(&cell, 0);
+    cell.state = ICC_Q0_RESTING;
+    assert(!icc_is_active(&cell));
+    cell.state = ICC_Q1_UPSTROKE;
+    assert(icc_is_active(&cell));
+    cell.state = ICC_Q2_PLATEAU;
+    assert(icc_is_active(&cell));
+    cell.state = ICC_Q3_REPOLARIZATION;
+    assert(icc_is_active(&cell));
+    cell.state = ICC_WAIT;
+    assert(!icc_is_active(&cell));
+}
+
+static void test_relay_handoff_does_not_reflect(void)
+{
+    Icc cell_a;
+    Icc cell_b;
+    IccPath path;
+
+    icc_init(&cell_a, 0);
+    icc_init(&cell_b, 0);
+    cell_a.state = ICC_Q2_PLATEAU;
+    cell_b.state = ICC_Q1_UPSTROKE;
+    icc_path_init(&path, &cell_a, &cell_b, 1000U, 6U);
+
+    icc_path_step(&path);
+    assert(path.state == ICC_PATH_ANNIHILATE);
+    assert(path.active_time_ms[0] == ICC_PATH_INACTIVE_TIME_MS);
+    assert(path.active_time_ms[1] == ICC_PATH_INACTIVE_TIME_MS);
+    assert(cell_a.relay == 0);
+    assert(cell_b.relay == 0);
 }
 
 static void test_blocked_destination_absorbs_path_relay(void)
@@ -380,7 +422,9 @@ int main(void)
     test_exact_pacemaker_intervals();
     test_path_relays_a_to_b_at_effective_delay();
     test_path_relays_b_to_a();
+    test_active_states_match_iccnet_core();
     test_path_annihilates_simultaneous_activation();
+    test_relay_handoff_does_not_reflect();
     test_blocked_destination_absorbs_path_relay();
     test_five_cell_1d_network_propagation();
     test_five_cell_network_configuration();

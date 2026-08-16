@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="900" viewBox="0 0 1100 900" role="img" aria-labelledby="title desc">
+<title id="title">Natural five-cell EGM waveforms at 200 milliseconds</title>
+<desc id="desc">Verilator EGM waveforms for the naturally generated Cell 1 pacemaker cycle, including baseline before Q1.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#172033}.title{font-size:24px;font-weight:600}.sub{font-size:14px;fill:#526077}.cell{font-size:15px;font-weight:600}.tick{font-size:12px;fill:#526077}.grid{stroke:#d9dee7;stroke-width:1}.zero{stroke:#8490a3;stroke-width:1.2}.q1{stroke:#526077;stroke-width:1;stroke-dasharray:5 4}.wave{fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}</style>
+<text class="title" x="92" y="32">Natural five-cell EGM waveforms — 200 ms timestep</text>
+<text class="sub" x="92" y="54">Intrinsic intervals: 20, 23, 26, 30, 40 s · no forced state · integer scale 10,000,000</text>
+<rect x="92" y="72.00" width="980" height="142.8" fill="#fbfcfe" stroke="#c9d0dc"/>
+<line class="grid" x1="92" x2="1072" y1="210.04" y2="210.04"/>
+<text class="tick" x="82" y="214.04" text-anchor="end">-8</text>
+<line class="grid" x1="92" x2="1072" y1="191.00" y2="191.00"/>
+<text class="tick" x="82" y="195.00" text-anchor="end">-6</text>
+<line class="grid" x1="92" x2="1072" y1="171.96" y2="171.96"/>
+<text class="tick" x="82" y="175.96" text-anchor="end">-4</text>
+<line class="grid" x1="92" x2="1072" y1="152.92" y2="152.92"/>
+<text class="tick" x="82" y="156.92" text-anchor="end">-2</text>
+<line class="zero" x1="92" x2="1072" y1="133.88" y2="133.88"/>
+<text class="tick" x="82" y="137.88" text-anchor="end">0</text>
+<line class="grid" x1="92" x2="1072" y1="114.84" y2="114.84"/>
+<text class="tick" x="82" y="118.84" text-anchor="end">2</text>
+<line class="grid" x1="92" x2="1072" y1="95.80" y2="95.80"/>
+<text class="tick" x="82" y="99.80" text-anchor="end">4</text>
+<line class="grid" x1="92" x2="1072" y1="76.76" y2="76.76"/>
+<text class="tick" x="82" y="80.76" text-anchor="end">6</text>
+<line class="q1" x1="273.48" x2="273.48" y1="72.00" y2="214.80"/>
+<text class="tick" x="278.48" y="86.00">Q1</text>
+<polyline class="wave" stroke="#2563eb" points="92.00,133.88 128.30,133.88 164.59,133.88 200.89,133.88 237.19,133.88 273.48,151.02 309.78,192.33 346.07,158.25 382.37,146.04 418.67,141.00 454.96,138.52 491.26,137.14 527.56,136.29 563.85,135.73 600.15,135.34 636.44,135.07 672.74,134.86 709.04,134.71 745.33,134.58 781.63,134.49 817.93,134.41 854.22,134.35 890.52,134.29 926.81,134.25 963.11,134.21 999.41,133.88 1035.70,133.88 1072.00,133.88"/>
+<text class="cell" x="18" y="94.00" fill="#2563eb">Cell 1</text>
+<rect x="92" y="228.80" width="980" height="142.8" fill="#fbfcfe" stroke="#c9d0dc"/>
+<line class="grid" x1="92" x2="1072" y1="366.84" y2="366.84"/>
+<text class="tick" x="82" y="370.84" text-anchor="end">-8</text>
+<line class="grid" x1="92" x2="1072" y1="347.80" y2="347.80"/>
+<text class="tick" x="82" y="351.80" text-anchor="end">-6</text>
+<line class="grid" x1="92" x2="1072" y1="328.76" y2="328.76"/>
+<text class="tick" x="82" y="332.76" text-anchor="end">-4</text>
+<line class="grid" x1="92" x2="1072" y1="309.72" y2="309.72"/>
+<text class="tick" x="82" y="313.72" text-anchor="end">-2</text>
+<line class="zero" x1="92" x2="1072" y1="290.68" y2="290.68"/>
+<text class="tick" x="82" y="294.68" text-anchor="end">0</text>
+<line class="grid" x1="92" x2="1072" y1="271.64" y2="271.64"/>
+<text class="tick" x="82" y="275.64" text-anchor="end">2</text>
+<line class="grid" x1="92" x2="1072" y1="252.60" y2="252.60"/>
+<text class="tick" x="82" y="256.60" text-anchor="end">4</text>
+<line class="grid" x1="92" x2="1072" y1="233.56" y2="233.56"/>
+<text class="tick" x="82" y="237.56" text-anchor="end">6</text>
+<line class="q1" x1="454.96" x2="454.96" y1="228.80" y2="371.60"/>
+<text class="tick" x="459.96" y="242.80">Q1</text>
+<polyline class="wave" stroke="#d97706" points="92.00,290.68 128.30,290.68 164.59,290.68 200.89,290.68 237.19,290.68 273.48,286.19 309.78,283.85 346.07,279.18 382.37,268.26 418.67,241.22 454.96,307.82 491.26,349.13 527.56,315.05 563.85,302.84 600.15,297.80 636.44,295.32 672.74,293.94 709.04,293.09 745.33,292.53 781.63,292.14 817.93,291.87 854.22,291.66 890.52,291.51 926.81,291.38 963.11,291.29 999.41,290.68 1035.70,290.68 1072.00,290.68"/>
+<text class="cell" x="18" y="250.80" fill="#d97706">Cell 2</text>
+<rect x="92" y="385.60" width="980" height="142.8" fill="#fbfcfe" stroke="#c9d0dc"/>
+<line class="grid" x1="92" x2="1072" y1="523.64" y2="523.64"/>
+<text class="tick" x="82" y="527.64" text-anchor="end">-8</text>
+<line class="grid" x1="92" x2="1072" y1="504.60" y2="504.60"/>
+<text class="tick" x="82" y="508.60" text-anchor="end">-6</text>
+<line class="grid" x1="92" x2="1072" y1="485.56" y2="485.56"/>
+<text class="tick" x="82" y="489.56" text-anchor="end">-4</text>
+<line class="grid" x1="92" x2="1072" y1="466.52" y2="466.52"/>
+<text class="tick" x="82" y="470.52" text-anchor="end">-2</text>
+<line class="zero" x1="92" x2="1072" y1="447.48" y2="447.48"/>
+<text class="tick" x="82" y="451.48" text-anchor="end">0</text>
+<line class="grid" x1="92" x2="1072" y1="428.44" y2="428.44"/>
+<text class="tick" x="82" y="432.44" text-anchor="end">2</text>
+<line class="grid" x1="92" x2="1072" y1="409.40" y2="409.40"/>
+<text class="tick" x="82" y="413.40" text-anchor="end">4</text>
+<line class="grid" x1="92" x2="1072" y1="390.36" y2="390.36"/>
+<text class="tick" x="82" y="394.36" text-anchor="end">6</text>
+<line class="q1" x1="636.44" x2="636.44" y1="385.60" y2="528.40"/>
+<text class="tick" x="641.44" y="399.60">Q1</text>
+<polyline class="wave" stroke="#059669" points="92.00,447.48 128.30,447.48 164.59,447.48 200.89,447.48 237.19,447.48 273.48,446.31 309.78,446.04 346.07,445.67 382.37,445.13 418.67,444.31 454.96,442.99 491.26,440.65 527.56,435.98 563.85,425.06 600.15,398.02 636.44,464.62 672.74,505.93 709.04,471.85 745.33,459.64 781.63,454.60 817.93,452.12 854.22,450.74 890.52,449.89 926.81,449.33 963.11,448.94 999.41,447.48 1035.70,447.48 1072.00,447.48"/>
+<text class="cell" x="18" y="407.60" fill="#059669">Cell 3</text>
+<rect x="92" y="542.40" width="980" height="142.8" fill="#fbfcfe" stroke="#c9d0dc"/>
+<line class="grid" x1="92" x2="1072" y1="680.44" y2="680.44"/>
+<text class="tick" x="82" y="684.44" text-anchor="end">-8</text>
+<line class="grid" x1="92" x2="1072" y1="661.40" y2="661.40"/>
+<text class="tick" x="82" y="665.40" text-anchor="end">-6</text>
+<line class="grid" x1="92" x2="1072" y1="642.36" y2="642.36"/>
+<text class="tick" x="82" y="646.36" text-anchor="end">-4</text>
+<line class="grid" x1="92" x2="1072" y1="623.32" y2="623.32"/>
+<text class="tick" x="82" y="627.32" text-anchor="end">-2</text>
+<line class="zero" x1="92" x2="1072" y1="604.28" y2="604.28"/>
+<text class="tick" x="82" y="608.28" text-anchor="end">0</text>
+<line class="grid" x1="92" x2="1072" y1="585.24" y2="585.24"/>
+<text class="tick" x="82" y="589.24" text-anchor="end">2</text>
+<line class="grid" x1="92" x2="1072" y1="566.20" y2="566.20"/>
+<text class="tick" x="82" y="570.20" text-anchor="end">4</text>
+<line class="grid" x1="92" x2="1072" y1="547.16" y2="547.16"/>
+<text class="tick" x="82" y="551.16" text-anchor="end">6</text>
+<line class="q1" x1="817.93" x2="817.93" y1="542.40" y2="685.20"/>
+<text class="tick" x="822.93" y="556.40">Q1</text>
+<polyline class="wave" stroke="#dc2626" points="92.00,604.28 128.30,604.28 164.59,604.28 200.89,604.28 237.19,604.28 273.48,603.76 309.78,603.68 346.07,603.58 382.37,603.47 418.67,603.31 454.96,603.11 491.26,602.84 527.56,602.47 563.85,601.93 600.15,601.11 636.44,599.79 672.74,597.45 709.04,592.78 745.33,581.86 781.63,554.82 817.93,621.42 854.22,662.73 890.52,628.65 926.81,616.44 963.11,611.40 999.41,604.28 1035.70,604.28 1072.00,604.28"/>
+<text class="cell" x="18" y="564.40" fill="#dc2626">Cell 4</text>
+<rect x="92" y="699.20" width="980" height="142.8" fill="#fbfcfe" stroke="#c9d0dc"/>
+<line class="grid" x1="92" x2="1072" y1="837.24" y2="837.24"/>
+<text class="tick" x="82" y="841.24" text-anchor="end">-8</text>
+<line class="grid" x1="92" x2="1072" y1="818.20" y2="818.20"/>
+<text class="tick" x="82" y="822.20" text-anchor="end">-6</text>
+<line class="grid" x1="92" x2="1072" y1="799.16" y2="799.16"/>
+<text class="tick" x="82" y="803.16" text-anchor="end">-4</text>
+<line class="grid" x1="92" x2="1072" y1="780.12" y2="780.12"/>
+<text class="tick" x="82" y="784.12" text-anchor="end">-2</text>
+<line class="zero" x1="92" x2="1072" y1="761.08" y2="761.08"/>
+<text class="tick" x="82" y="765.08" text-anchor="end">0</text>
+<line class="grid" x1="92" x2="1072" y1="742.04" y2="742.04"/>
+<text class="tick" x="82" y="746.04" text-anchor="end">2</text>
+<line class="grid" x1="92" x2="1072" y1="723.00" y2="723.00"/>
+<text class="tick" x="82" y="727.00" text-anchor="end">4</text>
+<line class="grid" x1="92" x2="1072" y1="703.96" y2="703.96"/>
+<text class="tick" x="82" y="707.96" text-anchor="end">6</text>
+<line class="q1" x1="999.41" x2="999.41" y1="699.20" y2="842.00"/>
+<text class="tick" x="1004.41" y="713.20">Q1</text>
+<polyline class="wave" stroke="#7c3aed" points="92.00,761.08 128.30,761.08 164.59,761.08 200.89,761.08 237.19,761.08 273.48,760.78 309.78,760.75 346.07,760.72 382.37,760.67 418.67,760.62 454.96,760.56 491.26,760.48 527.56,760.38 563.85,760.27 600.15,760.11 636.44,759.91 672.74,759.64 709.04,759.27 745.33,758.73 781.63,757.91 817.93,756.59 854.22,754.25 890.52,749.58 926.81,738.66 963.11,711.62 999.41,761.08 1035.70,761.08 1072.00,761.08"/>
+<text class="cell" x="18" y="721.20" fill="#7c3aed">Cell 5</text>
+<line stroke="#8490a3" x1="92.00" x2="92.00" y1="842.00" y2="847.00"/>
+<text class="tick" x="92.00" y="862.00" text-anchor="middle">-1000</text>
+<line stroke="#8490a3" x1="182.74" x2="182.74" y1="842.00" y2="847.00"/>
+<text class="tick" x="182.74" y="862.00" text-anchor="middle">-500</text>
+<line stroke="#8490a3" x1="273.48" x2="273.48" y1="842.00" y2="847.00"/>
+<text class="tick" x="273.48" y="862.00" text-anchor="middle">0</text>
+<line stroke="#8490a3" x1="364.22" x2="364.22" y1="842.00" y2="847.00"/>
+<text class="tick" x="364.22" y="862.00" text-anchor="middle">500</text>
+<line stroke="#8490a3" x1="454.96" x2="454.96" y1="842.00" y2="847.00"/>
+<text class="tick" x="454.96" y="862.00" text-anchor="middle">1000</text>
+<line stroke="#8490a3" x1="545.70" x2="545.70" y1="842.00" y2="847.00"/>
+<text class="tick" x="545.70" y="862.00" text-anchor="middle">1500</text>
+<line stroke="#8490a3" x1="636.44" x2="636.44" y1="842.00" y2="847.00"/>
+<text class="tick" x="636.44" y="862.00" text-anchor="middle">2000</text>
+<line stroke="#8490a3" x1="727.19" x2="727.19" y1="842.00" y2="847.00"/>
+<text class="tick" x="727.19" y="862.00" text-anchor="middle">2500</text>
+<line stroke="#8490a3" x1="817.93" x2="817.93" y1="842.00" y2="847.00"/>
+<text class="tick" x="817.93" y="862.00" text-anchor="middle">3000</text>
+<line stroke="#8490a3" x1="908.67" x2="908.67" y1="842.00" y2="847.00"/>
+<text class="tick" x="908.67" y="862.00" text-anchor="middle">3500</text>
+<line stroke="#8490a3" x1="999.41" x2="999.41" y1="842.00" y2="847.00"/>
+<text class="tick" x="999.41" y="862.00" text-anchor="middle">4000</text>
+<line stroke="#8490a3" x1="1090.15" x2="1090.15" y1="842.00" y2="847.00"/>
+<text class="tick" x="1090.15" y="862.00" text-anchor="middle">4500</text>
+<text class="tick" transform="translate(20 450) rotate(-90)" text-anchor="middle">EGM potential (model units)</text>
+<text class="tick" x="582.00" y="888" text-anchor="middle">Time relative to natural Cell 1 Q1 (ms)</text>
+<text class="sub" x="1072" y="54" text-anchor="end">One-second pre-Q1 baseline shown</text>
+</svg>

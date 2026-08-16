@@ -1,497 +1,317 @@
-# ICC Model on FlexPRET FPGA
+# FlexPRET Five-Cell ICC and Relative-Potential EGM Application
 
-This app runs a one-dimensional network of five ICC cells connected by four
-integer-timed bidirectional paths on FlexPRET on the DE1-SoC FPGA. The five
-cell intervals and four path delays and gaps are compiled into the application.
-The FlexPRET bootloader is programmed onto the FPGA first, then the app is sent
-to instruction scratchpad memory over UART.
+This application runs a deterministic five-cell, one-dimensional ICC network
+on FlexPRET. Five ICC cells are connected by four bidirectional propagation
+paths. EGM contributions are obtained from one signed 32-bit lookup table whose
+only independent variable is the oriented relative position between the
+electrode and a moving dipole.
 
-This stage includes the ICC, path, 1D network, and first integer EGM runtime.
-The EGM uses generated four-path lookup tables and a fixed-bounds target-side
-sum. It does not yet contain controller integration or GES communication.
-Design details are in [IMPLEMENTATION.md](IMPLEMENTATION.md). The 40-case
-pacemaker-location and path-delay campaign is reported in
-[VERILATOR_TEST_RESULTS.md](VERILATOR_TEST_RESULTS.md). Timestep sensitivity
-from 200 ms down to 10 ms is reported in
-[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md). The proposed
-FlexPRET-specific moving-dipole EGM design, lookup-table rationale, timestep
-change procedure, and differences from `iccnet-core` are documented in
-[EGM_DESIGN.md](EGM_DESIGN.md). The preliminary audit of the previous FlexPRET
-HEPTANE extension is recorded in
-[HEPTANE_FLEXPRET_AUDIT.md](HEPTANE_FLEXPRET_AUDIT.md). The lookup generator,
-its independent 370-sample path-0 `iccnet-core` comparison, and the four-path
-extension are reported in [EGM_LUT_VALIDATION.md](EGM_LUT_VALIDATION.md).
-End-to-end target integration results are in
-[EGM_RUNTIME_VALIDATION.md](EGM_RUNTIME_VALIDATION.md). The five-electrode
-waveform comparison, numerical results, and reusable CSV schema are documented
-in [EGM_FIVE_ELECTRODE_RESULTS.md](EGM_FIVE_ELECTRODE_RESULTS.md).
+Q1, Q2, and Q3 are active propagation states, matching ICCNet Core. Keeping
+the preceding cell active during a relay handoff makes the completed path
+annihilate instead of launching an artificial reflected dipole.
 
-## How FPGA Loading Works
+The target executes integer arithmetic only. Floating point and square root are
+confined to the host-side table generator and independent reference test.
 
-There are two separate things to load:
+## Architecture
 
-1. **FlexPRET bootloader FPGA image** — programmed through the DE1-SoC
-   USB-Blaster in Quartus Programmer.
-2. **ICC application** — built as `icc-model.mem` and sent to the running
-   bootloader through a 3.3 V USB-UART adapter.
-
-Rebuild and resynthesize the bootloader only after changing FPGA or bootloader
-source. If the board was merely power-cycled, program the existing `.sof`
-again. Rebuilding the ICC application does not require FPGA synthesis.
-
-## 1. Build and Program the Bootloader FPGA Image
-
-If the same bootloader-enabled FlexPRET image used for GES is already
-programmed and the board has not been power-cycled, continue to
-[2. Build the ICC Application](#2-build-the-icc-application).
-
-For a full bootloader build, open the repository in VS Code and run:
+For propagation direction `d`, where A-to-B is `+1` and B-to-A is `-1`, the
+lookup coordinate is:
 
 ```text
-Ctrl+Shift+P
-Tasks: Run Task
-Mega: Build and Synthesize Bootloader FPGA
+oriented_relative_position = d * (electrode_x - dipole_x)
 ```
 
-The task:
+The table covers `-24000` through `+24000 um` in `60 um` increments. It has 801
+`int32_t` entries and occupies 3,204 bytes. The existing 6 mm path and 1000 ms
+delay give a propagation velocity of 6 mm/s, so every supported timestep lands
+exactly on the table grid:
 
-1. Builds the FlexPRET bootloader SDK.
-2. Generates the DE1-SoC FlexPRET Verilog.
-3. Runs the Quartus bootloader project flow.
-4. Opens Quartus Programmer.
+| Timestep | Dipole movement | LUT index movement |
+|---:|---:|---:|
+| 200 ms | 1200 um | 20 |
+| 100 ms | 600 um | 10 |
+| 50 ms | 300 um | 5 |
+| 20 ms | 120 um | 2 |
+| 10 ms | 60 um | 1 |
 
-When Quartus Programmer opens:
+The electrode may be moved at runtime among the five cell positions: `0`,
+`6000`, `12000`, `18000`, and `24000 um`. Moving it does not regenerate the
+table and does not rebuild the application.
 
-1. Connect the DE1-SoC USB-Blaster cable.
-2. Click `Hardware Setup...` and select `DE-SoC [USB-1]` if necessary.
-3. Keep `Mode` set to `JTAG`.
-4. Click `Add File...` and select:
+## Environment setup
+
+The verified environment is WSL Ubuntu with the FlexPRET repository at:
 
 ```text
-build/fpga/de1-soc/fp-bootloader/de1soc_bootloader.sof
+/home/eugene/gastric-pacemaker/fp-ges
 ```
 
-In the Windows file picker, this may appear as:
-
-```text
-Z:/home/eugene/gastric-pacemaker/fp-ges/build/fpga/de1-soc/fp-bootloader/de1soc_bootloader.sof
-```
-
-5. Check `Program/Configure` for the `5CSEMA5F31` device.
-6. Click `Start`.
-
-At 100%, the FPGA is running the FlexPRET bootloader.
-
-### Reprogram Without Rebuilding
-
-The FPGA configuration is lost when the DE1-SoC is power-cycled. If the FPGA
-and bootloader source have not changed, reuse the existing `.sof` rather than
-rerunning synthesis.
-
-Open Quartus Programmer from WSL:
-
-```bash
-/mnt/c/intelFPGA/18.1/quartus/bin64/quartus_pgmw.exe
-```
-
-Select the DE1-SoC hardware, add the existing `de1soc_bootloader.sof`, check
-`Program/Configure`, and click `Start`. Pressing `KEY[3]` resets FlexPRET
-but does not erase the FPGA configuration.
-
-## 2. Build the ICC Application
-
-Use a dedicated FPGA build directory so FPGA objects and linker configuration
-are not mixed with the emulator build. The `generated/` directory is
-deliberately excluded from Git: `tools/generate_egm_lut.c` and its configuration
-are the source of truth. Generate the tables after every clone or pull and
-before configuring CMake:
+Load the FlexPRET environment and RISC-V compiler before configuring a target:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges
 source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
-cd apps/icc-model
-./tools/generate_egm_luts.sh
-cmake -B build-fpga
-cmake --build build-fpga --target icc-model
 ```
 
-The build generates:
-
-```text
-apps/icc-model/build-fpga/icc-model.mem
-apps/icc-model/bin/icc-model
-```
-
-The `.mem` file is the compiled application. `bin/icc-model` is the generated
-UART flash-and-console launcher.
-
-`generate_egm_luts.sh` replaces the generated directory only after the host
-generator succeeds. It also writes `GENERATION_SHA256SUMS.txt`, containing the
-generator-source hash and the hash of every output. CMake stops with the exact
-generation command if the table selected by `ICC_MODEL_TIMESTEP_MS` is absent.
-
-## 3. Connect the USB-UART Adapter
-
-The bootloader receives the ICC application through FlexPRET UART0. Use a
-3.3 V USB-UART adapter and cross TX/RX:
-
-```text
-USB-UART TX  -> GPIO_0[1]  FlexPRET UART0 RX
-USB-UART RX  -> GPIO_0[0]  FlexPRET UART0 TX
-USB-UART GND -> GPIO_0[2]  GND
-```
-
-Do not connect a 5 V UART signal directly to the DE1-SoC GPIO.
-
-### Attach the Adapter to WSL
-
-If `/dev/ttyUSB0` is missing, open Windows PowerShell and run:
-
-```powershell
-usbipd list
-```
-
-Find the USB serial adapter's bus ID. Replace `1-3` below with that ID:
-
-```powershell
-usbipd bind --busid 1-3
-usbipd attach --wsl --busid 1-3
-```
-
-If USBPcap requires force:
-
-```powershell
-usbipd bind --force --busid 1-3
-```
-
-Back in WSL, verify the adapter:
-
-```bash
-ls -l /dev/ttyUSB*
-```
-
-## 4. Flash and Run the ICC Application
-
-Put the bootloader into dynamic UART loading mode:
-
-1. Set `SW[0]` to `ON` / `1`.
-2. Press `KEY[3]` to reset FlexPRET.
-3. Keep `SW[0]` on while flashing.
-
-If `SW[0]` is low during reset, the bootloader skips UART loading and runs
-the static application. If `SW[0]` is high and only `LEDR0` remains on, the
-bootloader is waiting for an application over UART.
-
-From `apps/icc-model`:
-
-```bash
-sudo chmod 666 /dev/ttyUSB0
-./bin/icc-model
-```
-
-The launcher serializes `build-fpga/icc-model.mem`, transfers it at 115200
-baud, and opens `picocom`. The FPGA application starts the compiled five-cell
-network immediately. This autonomous FPGA build does not print model data to
-UART, so a blank `picocom` window after a successful transfer is expected. Exit
-`picocom` with `Ctrl+A`, then `Ctrl+X`.
-
-The Verilator target uses the same compiled configuration and prints CSV for
-development testing.
-
-## Troubleshooting
-
-### Wrong Compiler Cached
-
-Run `source env.bash` before configuring. If CMake was run first, it may cache
-the host compiler (`/usr/bin/cc`) instead of the RISC-V compiler. Typical
-errors are:
-
-```text
-cc: error: unrecognized argument in option '-mabi=ilp32'
-cc: fatal error: cannot read spec file 'nosys.specs'
-```
-
-Remove only the ICC FPGA build directory and configure again:
-
-```bash
-cd /home/eugene/gastric-pacemaker/fp-ges
-source env.bash
-export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
-cd apps/icc-model
-rm -rf build-fpga
-./tools/generate_egm_luts.sh
-cmake -B build-fpga
-cmake --build build-fpga --target icc-model
-```
-
-### USB-UART Permission Denied
-
-If flashing reports `Permission denied: '/dev/ttyUSB0'`:
-
-```bash
-sudo chmod 666 /dev/ttyUSB0
-./bin/icc-model
-```
-
-For a persistent fix:
-
-```bash
-sudo usermod -aG dialout $USER
-```
-
-Then run `wsl --shutdown` from Windows PowerShell, reopen WSL, and reattach
-the adapter with `usbipd attach`.
-
-### USB-UART Uses a Different Device
-
-The device path is embedded in the launcher during CMake configuration. If the
-adapter is `/dev/ttyUSB1`, set it before configuring:
-
-```bash
-cd /home/eugene/gastric-pacemaker/fp-ges
-source env.bash
-export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
-export FP_SDK_FPGA_FLASH_DEVICE=/dev/ttyUSB1
-cd apps/icc-model
-rm -rf build-fpga
-./tools/generate_egm_luts.sh
-cmake -B build-fpga
-cmake --build build-fpga --target icc-model
-./bin/icc-model
-```
-
-### Flash Reaches Picocom but Shows No Model Output
-
-This is expected for the autonomous FPGA build: UART is used by the bootloader
-to load the application, but the running ICC model does not transmit telemetry.
-Use the Verilator target when CSV output is required.
-
-If the application transfer itself fails, check that:
-
-- the bootloader `.sof` is programmed;
-- `SW[0]` was on when `KEY[3]` was pressed;
-- USB-UART TX and RX are crossed;
-- the adapter uses 3.3 V logic; and
-- the launcher uses the correct `/dev/ttyUSB*` device.
-
-## Numerical Representation and Output
-
-The reference model expresses voltage in millivolts. Before compilation, each
-voltage is converted to an integer number of nanovolts:
-
-```text
-voltage_nv = voltage_mV × 1,000,000
-voltage_mV = voltage_nv / 1,000,000
-```
-
-Examples:
-
-```text
--4.494 µV     = -4494 nV
--67.633600 mV = -67633600 nV
-```
-
-The nanovolt is the storage unit, so runtime voltage addition and comparison
-use signed integers. The source increments are calibrated for the production
-200 ms timestep. Experimental smaller-step Q0 increments use a calibrated
-compile-time lookup table. Q1-Q3 increments remain integer-scaled. The runtime
-update contains no floating-point values, multiplication, division, or
-square-root operations.
-Diagnostic conversion to nearest whole microvolts uses integer division only
-for CSV output.
-
-Both targets use Cell 4 as a 20-second pacemaker, four follower cells, 1000 ms
-path delays, and 6 mm gaps. Path delay and active propagation time remain
-integer milliseconds.
-
-## Configure the Autonomous 1D Network
-
-The network parameters are compiled into `src/main.c`. Change the three arrays
-inside `initialize_network()` to configure the cell intervals, path delays, and
-path gaps:
-
-```c
-static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
-    0, 0, 0, 0, 20
-};
-
-static const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
-    1000U, 1000U, 1000U, 1000U
-};
-
-static const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {
-    6U, 6U, 6U, 6U
-};
-```
-
-`intervals[i]` configures Cell `i`. Path `i` joins Cell `i` to Cell `i + 1`,
-so `delays[i]` and `gaps[i]` configure that connection. The supported cell
-intervals are:
-
-| Value | Meaning |
-|---:|---|
-| `-1` | Blocked cell |
-| `0` | Follower with no intrinsic pacemaker |
-| `15`, `20`, `23`, `26`, `30`, `40` | Pacemaker interval in seconds |
-
-Every path delay must be greater than the selected model timestep and an exact
-multiple of that timestep. With the production 200 ms timestep, valid examples
-include 400, 600, 800, 1000, and 1200 ms. Each gap must be from 1 to 255 mm.
-
-For example, this makes Cell 0 the pacemaker and gives every path different
-parameters:
-
-```c
-static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
-    20, 0, 0, 0, 0
-};
-
-static const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
-    400U, 600U, 800U, 1000U
-};
-
-static const uint8_t gaps[ICC_NETWORK_1D_PATH_COUNT] = {
-    3U, 4U, 5U, 6U
-};
-```
-
-To change the number of cells, edit `inc/network.h`:
-
-```c
-#define ICC_NETWORK_1D_CELL_COUNT 7U
-#define ICC_NETWORK_1D_PATH_COUNT (ICC_NETWORK_1D_CELL_COUNT - 1U)
-```
-
-The path count is derived automatically. After changing the cell count, update
-the arrays in `src/main.c` so they contain one interval per cell and one delay
-and gap per path. The construction and stepping loops in `src/network.c`
-already use these compile-time counts and do not need to be rewritten.
-
-The emulator CSV functions `print_csv_header()` and `print_csv_row()` currently
-describe exactly five cells and four paths. They must also be updated when the
-cell count changes. With fewer than five cells, the existing output code could
-access outside the arrays; with more than five cells, it would omit the extra
-cells. Update the five-cell expectations in `tests/test_icc.c` as well.
-
-The defaults in `inc/path.h` do not override these arrays. The autonomous
-network passes every delay and gap explicitly from `src/main.c`. Adding a new
-pacemaker interval outside the supported list also requires adding its
-calibrated resting increments in `inc/icc_calibration.h` and a validation case.
-
-## Experimental Timestep Selection
-
-The production timestep is 200 ms. A smaller compile-time timestep can be
-selected for sensitivity testing:
-
-```bash
-cmake -S . -B build-emu-100ms \
-  -DTARGET=emulator \
-  -DICC_MODEL_TIMESTEP_MS=100
-cmake --build build-emu-100ms --target icc-model
-```
-
-`ICC_MODEL_TIMESTEP_MS` must be no greater than 200 and must divide 200
-exactly. The tested values are 200, 100, 50, 20, and 10 ms. The Q0 calibration
-lookup and Q1-Q3 scaling use integer arithmetic and introduce no floating point.
-
-At 200, 100, and 50 ms, the calibration reproduces every configured intrinsic
-cpm exactly. The maximum measured error at 20 and 10 ms is 20 ms because
-some target periods have no exact constant integer Q0 increment. Smaller modes
-remain experimental; see
-[TIMESTEP_TEST_RESULTS.md](TIMESTEP_TEST_RESULTS.md) before using them in a
-physiological result.
-
-## 5. Build and Run in the Emulator
-
-The emulator uses FlexPRET's Verilator-based `fp-emu`. Keep it in a separate
-build directory:
-
-```bash
-cd /home/eugene/gastric-pacemaker/fp-ges
-source env.bash
-export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
-cd apps/icc-model
-./tools/generate_egm_luts.sh
-cmake -B build-emu -DTARGET=emulator
-cmake --build build-emu --target icc-model
-./bin/icc-model-emu
-```
-
-This is equivalent to:
-
-```bash
-fp-emu +ispm=apps/icc-model/build-emu/icc-model.mem
-```
-
-Stop the continuously running model with `Ctrl+C`. Check that the emulator is
-available with:
+Confirm the tools:
 
 ```bash
 fp-emu --hwconfig
+riscv-none-elf-gcc --version
+cmake --version
+gcc --version
 ```
 
-## 6. Run the Host Tests
+## Generate the lookup table
+
+Generated files are deliberately ignored by Git. Run the generator after a
+clone and before CMake configuration:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
-gcc -std=c11 -Wall -Wextra -Werror -Iinc \
-    src/icc.c src/path.c src/network.c tests/test_icc.c -o /tmp/icc-model-test
-/tmp/icc-model-test
 ./tools/generate_egm_luts.sh
+```
+
+This creates:
+
+```text
+generated/egm_relative/egm_relative_lut.h
+generated/egm_relative/egm_relative_lut.csv
+generated/egm_relative/EGM_LUT_GENERATION_REPORT.md
+generated/egm_relative/GENERATION_SHA256SUMS.txt
+```
+
+Regenerate after changing the EGM equation, electrode height, dipole moment,
+longitudinal or transverse weight, integer scale, relative-position range,
+spatial resolution, generator implementation, or generated metadata.
+
+Do not regenerate merely because the electrode moves, the simulation timestep
+changes, a different path becomes active, propagation reverses, or another cell
+is examined in telemetry.
+
+The present runtime accepts only uniform 6 mm paths with 1000 ms delay. A
+different gap or delay is rejected because the division-free coordinate
+mapping is calibrated to 6 mm/s. Supporting another velocity requires a new
+integer coordinate mapping, but it does not alter the physical potential as a
+function of relative position.
+
+## Host tests
+
+Run all host checks:
+
+```bash
+cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+./tools/generate_egm_luts.sh
+./tools/run_icc_host_tests.sh
 ./tools/run_egm_lut_tests.sh
 ./tools/run_egm_runtime_tests.sh
 ```
 
-The EGM runtime test selects each supported table in turn and drives the real
-path state machine in both propagation directions. To print one EGM sample per
-step in a finite Verilator scenario, configure with
-`-DICC_VERILATOR_EGM_TRACE=ON`.
+The validation performed on 2026-08-16 passed:
 
-The lookup-generator test creates two independent temporary outputs and
-requires them to match byte-for-byte. It therefore tests deterministic
-generation without relying on committed generated files.
+- ICC, path, and network tests at 200, 100, 50, 20, and 10 ms;
+- two independent, byte-identical table generations;
+- all 801 entries against an independent double-precision equation;
+- both table endpoints, zero offset, near-electrode signs, and the transverse
+  symmetry identity;
+- five electrode positions, four paths, two directions, and every legal path
+  progression step at every timestep;
+- first and last active progression states;
+- repeated electrode changes in one process;
+- invalid electrodes, gaps, delays, topology, progression, and null inputs;
+- Q1/negative-EGM alignment for every cell and timestep.
 
-## Target Configuration Reference
+The measured maximum absolute table error was
+`4.999771405223008e-08` potential units at `21780 um`. The maximum meaningful
+relative error was `1.4873562175373967e-06` at `-23640 um`, using a
+`1e-5`-unit reference-magnitude threshold. The absolute acceptance bound was
+`5.00001e-8`, slightly above half of one `1e-7` output unit.
 
-- `TARGET` accepts `fpga` or `emulator`.
-- The default is `fpga`.
-- `ICC_MODEL_TIMESTEP_MS` defaults to `200`; tested experimental values are
-  `100`, `50`, `20`, and `10`.
-- FPGA and emulator builds use separate build directories.
-- `bin/icc-model` is the FPGA launcher.
-- `bin/icc-model-emu` is the emulator launcher.
-- Five cells, four bidirectional paths, and one fixed-electrode EGM output are
-  included.
-- The EGM table configuration currently requires 1000 ms path delays and 6 mm
-  gaps. Regenerate the tables when the timestep, path delay, spacing, electrode
-  geometry, dipole parameters, integer scale, or generator algorithm changes.
+## Verilator tests
 
-## Short Version
+Run the finite automatically terminating matrix:
 
 ```bash
-# First-time setup or after changing FPGA/bootloader source:
-# In VS Code, run: Mega: Build and Synthesize Bootloader FPGA
-# In Quartus Programmer, select DE-SoC [USB-1], add:
-# build/fpga/de1-soc/fp-bootloader/de1soc_bootloader.sof
-# Check Program/Configure and click Start.
-#
-# After a power cycle, reuse the existing .sof in Quartus Programmer.
-#
-# Wire the 3.3 V USB-UART:
-# TX -> GPIO_0[1], RX -> GPIO_0[0], GND -> GPIO_0[2]
+cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+./tools/run_egm_verilator_tests.sh
+```
 
+The script runs all five electrode positions at all five timesteps. Cells 1-4
+are checked with A-to-B propagation; Cell 5 is checked with B-to-A propagation.
+Both scenarios propagate through all four paths. Functional runs print every
+EGM sample, while separate no-trace runs measure execution and scheduling.
+
+The 2026-08-16 matrix contained 25 passing configurations. Each terminated at
+or after 4500 ms of biological time. Every Q1 activation occurred at the
+expected 1000 ms path spacing. At the accelerated 1,000,000 ns release period:
+
+- worst measured ICC/path/EGM execution time: `25,420 ns`;
+- maximum release lateness: `160 ns`;
+- 10 ms biological deadline margin: `9,974,640 ns` in the worst 10 ms case.
+
+These are cycle-accurate Verilator observations, not a formal WCET proof and
+not DE1-SoC board measurements. Results and representative traces are in
+`validation/egm_relative/`.
+
+## All-cell waveform records
+
+Run the natural-pacemaker waveform matrix with:
+
+```bash
+cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+./tools/run_egm_waveform_tests.sh
+```
+
+This performs 25 additional finite Verilator runs: all five electrode
+positions at all five timesteps. Scenario 0 gives Cells 1-5 intrinsic intervals
+of 20, 23, 26, 30, and 40 s. No cell state is forced. The initial simultaneous
+WAIT-state release is retained in the raw trace, while the recorded waveform
+window uses the next natural Cell 1 Q1 and includes one second of pre-Q1
+baseline. The script asserts an intrinsic Cell 1 event, path-driven activation
+of Cells 2-5 at 1000 ms spacing, the selected electrode, and automatic
+termination. It creates combined waveform CSVs, Q1 event CSVs, and SVG figures
+under `generated/egm_relative/waveforms_natural_a_to_b/`.
+
+The tracked numerical records and waveform figures are under
+`validation/egm_relative/waveforms/`. Their hashes, extrema, column format,
+boundary interpretation, and reproduction details are recorded in
+`EGM_ALL_TIMESTEP_WAVEFORMS.md`.
+
+## Build for the FPGA
+
+Generate the table first, then use a timestep-specific build directory:
+
+```bash
 cd /home/eugene/gastric-pacemaker/fp-ges
 source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
 ./tools/generate_egm_luts.sh
-cmake -B build-fpga
-cmake --build build-fpga --target icc-model
-
-# On the board: set SW[0] on, press KEY[3], and leave SW[0] on.
-sudo chmod 666 /dev/ttyUSB0
-./bin/icc-model
-
-# Exit picocom with Ctrl+A, then Ctrl+X.
+cmake -S . -B build-fpga-200ms \
+  -DTARGET=fpga \
+  -DICC_MODEL_TIMESTEP_MS=200 \
+  -DICC_EGM_ELECTRODE_X_UM=6000
+cmake --build build-fpga-200ms --target icc-model
 ```
+
+The initial electrode value is a startup setting only. Target code can call
+`icc_egm_set_electrode_x_um()` later without rebuilding or regenerating.
+
+To cross-build and inspect all supported timesteps:
+
+```bash
+./tools/run_egm_fpga_checks.sh
+```
+
+All five FPGA builds passed on 2026-08-15. The largest build was the 100 ms
+configuration:
+
+| Quantity | Bytes |
+|---|---:|
+| ISPM used | 15,904 |
+| DSPM static used | 6,272 |
+| Reserved stack | 2,048 |
+| Total SPM used or reserved | 24,224 |
+| Combined configured ISPM + DSPM | 131,072 |
+| Remaining SPM | 106,848 |
+
+The linker places the 3,204-byte constant table in `.data`, so its load image
+is present in ISPM and its runtime copy is present in DSPM. The table symbol
+itself remains exactly 3,204 bytes.
+
+## Runtime electrode API
+
+The public interface in `inc/egm.h` is:
+
+```c
+bool icc_egm_init(IccEgm *egm, int32_t electrode_x_um);
+bool icc_egm_set_electrode_x_um(IccEgm *egm, int32_t electrode_x_um);
+int32_t icc_egm_electrode_x_um(const IccEgm *egm);
+bool icc_egm_compute(
+    const IccEgm *egm,
+    const IccNetwork1d *network,
+    IccEgmValue *result);
+```
+
+The setter accepts only the five physical cell coordinates. Invalid values are
+rejected and do not replace the current electrode. EGM state is passed
+explicitly; there is no hidden global electrode.
+
+The current emulator CSV reports every cell. It does not have a telemetry-cell
+filter. A downstream telemetry choice determines which ICC voltage is sent or
+displayed; it must not modify `IccEgm.electrode_position_units`. Conversely,
+moving the EGM electrode changes only the EGM coordinate and does not select an
+ICC telemetry channel.
+
+## CSV columns
+
+The generated `egm_relative_lut.csv` contains:
+
+| Column | Meaning |
+|---|---|
+| `oriented_relative_position_um` | Signed LUT coordinate in micrometres. |
+| `reference_potential` | Host double-precision equation result. |
+| `scaled_integer` | Stored signed value at scale 10,000,000. |
+| `reconstructed_potential` | Stored integer divided by the scale. |
+| `quantization_error` | Reconstructed minus reference value. |
+| `absolute_error` | Absolute quantisation error. |
+
+Ordinary emulator output contains sample and biological time, FlexPRET time,
+measured period, release lateness, measured execution time, electrode x,
+states and integer-nanovolt voltages for all five cells, the scaled EGM, and
+all four path states.
+
+Its exact header is:
+
+```text
+sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,execution_time_ns,egm_electrode_x_um,cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,cell_4_state,cell_4_nv,egm_scaled,path_0_state,path_1_state,path_2_state,path_3_state
+```
+
+## Hardware programming and application flashing
+
+No board was flashed during the 2026-08-15 validation.
+
+To prepare the DE1-SoC manually:
+
+1. Connect power, USB-Blaster, and a 3.3 V USB-UART adapter.
+2. Program the FlexPRET bootloader `.sof` with Quartus Programmer.
+3. Connect adapter TX to FlexPRET UART0 RX, adapter RX to UART0 TX, and GND to
+   GND. Do not connect a 5 V UART signal.
+4. Attach the adapter to WSL and confirm its device, normally `/dev/ttyUSB0`.
+5. Grant serial access through the appropriate Linux group, then sign out and
+   back in. `chmod +x` is not a serial-port permission fix.
+6. Build the FPGA target as shown above.
+7. Flash and open its console with:
+
+```bash
+cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+FP_SDK_FPGA_FLASH_DEVICE=/dev/ttyUSB0 ./bin/icc-model
+```
+
+Only one program should own `/dev/ttyUSB0`. Close `picocom`, `minicom`, or any
+other serial terminal before running the launcher.
+
+## Runtime instruction restrictions
+
+The RISC-V EGM object was inspected at every timestep. It contains no
+floating-point, division, modulo, or square-root instruction and references no
+floating-point, square-root, division/modulo, or 64-bit arithmetic helper.
+
+The complete ELF contains `__divsi3`, `__udivsi3`, `__modsi3`, and
+`__umodsi3`. They are outside the EGM implementation: network initialization
+checks runtime path-delay divisibility and the linked integer-printing library
+formats output. No 64-bit arithmetic helper, floating conversion helper, or
+square-root helper was present.
+
+## Limitations
+
+- Only a straight five-cell 1D geometry is implemented.
+- All electrodes share the fixed 1 mm height used to generate the table.
+- Runtime electrode positions are restricted to the five cell centres.
+- EGM runtime geometry currently requires 6 mm gaps and 1000 ms path delays.
+- Table values are model-potential units, not calibrated clinical millivolts.
+- Verilator timing is evidence from simulation, not formal WCET analysis.
+- HEPTANE analysis and DE1-SoC timing/measurement remain to be performed.
+- No FPGA was flashed as part of this work.

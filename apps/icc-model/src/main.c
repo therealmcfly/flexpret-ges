@@ -15,6 +15,10 @@
 #define ICC_PERIOD_NS (ICC_TIMESTEP_MS * 1000000U)
 #endif
 
+#ifndef ICC_EGM_INITIAL_ELECTRODE_X_UM
+#define ICC_EGM_INITIAL_ELECTRODE_X_UM ICC_EGM_DEFAULT_ELECTRODE_X_UM
+#endif
+
 #ifdef ICC_VERILATOR_TEST_SCENARIO
 #ifndef ICC_VERILATOR_TEST_PATH_DELAY_MS
 #define ICC_VERILATOR_TEST_PATH_DELAY_MS 1000U
@@ -75,6 +79,11 @@ static bool initialize_network(IccNetwork1d *network)
     static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
         40, 40, 40, 40, 40
     };
+#elif ICC_VERILATOR_TEST_SCENARIO == 12 || \
+      ICC_VERILATOR_TEST_SCENARIO == 13
+    static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
+        0, 0, 0, 0, 0
+    };
 #else
 #error "Unsupported ICC_VERILATOR_TEST_SCENARIO"
 #endif
@@ -103,18 +112,40 @@ static bool initialize_network(IccNetwork1d *network)
         gaps);
 }
 
+#if defined(ICC_VERILATOR_TEST_SCENARIO) && \
+    (ICC_VERILATOR_TEST_SCENARIO == 12 || \
+     ICC_VERILATOR_TEST_SCENARIO == 13)
+static void initialize_egm_propagation_wave(IccNetwork1d *network)
+{
+    const uint8_t source_cell = ICC_VERILATOR_TEST_SCENARIO == 12 ? 0U : 4U;
+
+    for (uint8_t cell = 0U; cell < ICC_NETWORK_1D_CELL_COUNT; ++cell) {
+        network->cells[cell].state = ICC_Q0_RESTING;
+        network->cells[cell].voltage_nv = -67633600;
+        network->cells[cell].wait_ms_accum = 0U;
+        network->cells[cell].relay = 0;
+    }
+    network->cells[source_cell].state = ICC_Q1_UPSTROKE;
+    for (uint8_t path = 0U; path < ICC_NETWORK_1D_PATH_COUNT; ++path) {
+        icc_path_step(&network->paths[path]);
+    }
+}
+#endif
+
 #ifdef __EMULATOR__
 #ifdef ICC_VERILATOR_TEST_SCENARIO
 static void print_test_header(const IccNetwork1d *network)
 {
     uint8_t index;
 
-    printf("TEST,%d,timestep_ms,%u,period_ns,%u,path_delay_ms,%u,samples,%u\n",
+    printf("TEST,%d,timestep_ms,%u,period_ns,%u,path_delay_ms,%u,samples,%u,"
+           "electrode_x_um,%d\n",
            ICC_VERILATOR_TEST_SCENARIO,
            (unsigned)ICC_TIMESTEP_MS,
            (unsigned)ICC_PERIOD_NS,
            (unsigned)ICC_VERILATOR_TEST_PATH_DELAY_MS,
-           (unsigned)ICC_VERILATOR_TEST_SAMPLES);
+           (unsigned)ICC_VERILATOR_TEST_SAMPLES,
+           (int)ICC_EGM_INITIAL_ELECTRODE_X_UM);
     for (index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
         printf("CONFIG,%u,%d\n",
                (unsigned)index,
@@ -157,6 +188,7 @@ static void print_csv_header(void)
 {
     printf("ICC integer-nanovolt five-cell 1D network\n");
     printf("sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,"
+           "execution_time_ns,egm_electrode_x_um,"
            "cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,"
            "cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,"
            "cell_4_state,cell_4_nv,egm_scaled,path_0_state,path_1_state,"
@@ -168,10 +200,13 @@ static void print_csv_row(
     uint32_t iteration_start,
     uint32_t measured_period,
     uint32_t release_lateness,
+    uint32_t execution_time,
+    int32_t electrode_x_um,
     const IccNetwork1d *network,
     IccEgmValue egm_value)
 {
     printf("%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32
+           ",%" PRIu32 ",%" PRId32
            ",%s,%" PRId32 ",%s,%" PRId32
            ",%s,%" PRId32 ",%s,%" PRId32
            ",%s,%" PRId32 ",%" PRId32 ",%s,%s,%s,%s\n",
@@ -180,6 +215,8 @@ static void print_csv_row(
            iteration_start,
            measured_period,
            release_lateness,
+           execution_time,
+           electrode_x_um,
            icc_state_name(network->cells[0].state),
            network->cells[0].voltage_nv,
            icc_state_name(network->cells[1].state),
@@ -202,6 +239,7 @@ static void print_csv_row(
 int main(void)
 {
     IccNetwork1d network;
+    IccEgm egm;
     uint32_t sample = 0U;
     uint32_t clock_probe_start;
     uint32_t clock_probe_end;
@@ -214,14 +252,22 @@ int main(void)
     uint32_t minimum_measured_period = UINT32_MAX;
     uint32_t maximum_measured_period = 0U;
     uint32_t maximum_release_lateness = 0U;
+    uint32_t maximum_execution_time = 0U;
     uint8_t index;
 #endif
 
     if (!initialize_network(&network)) {
         return 1;
     }
-    egm_configuration_matches =
-        icc_egm_1d5c_configuration_matches(&network);
+#if defined(ICC_VERILATOR_TEST_SCENARIO) && \
+    (ICC_VERILATOR_TEST_SCENARIO == 12 || \
+     ICC_VERILATOR_TEST_SCENARIO == 13)
+    initialize_egm_propagation_wave(&network);
+#endif
+    if (!icc_egm_init(&egm, ICC_EGM_INITIAL_ELECTRODE_X_UM)) {
+        return 1;
+    }
+    egm_configuration_matches = icc_egm_configuration_matches(&network);
 #ifndef ICC_VERILATOR_TEST_SCENARIO
     if (!egm_configuration_matches) {
         return 1;
@@ -255,6 +301,11 @@ int main(void)
         previous_path_states[index] = network.paths[index].state;
     }
     print_test_header(&network);
+#if ICC_VERILATOR_TEST_SCENARIO == 12
+    printf("Q1,0,0,0,forced\n");
+#elif ICC_VERILATOR_TEST_SCENARIO == 13
+    printf("Q1,0,0,4,forced\n");
+#endif
 #else
     print_csv_header();
 #endif
@@ -264,6 +315,10 @@ int main(void)
         uint32_t iteration_start;
         uint32_t measured_period;
         uint32_t release_lateness;
+#ifdef __EMULATOR__
+        uint32_t iteration_end;
+        uint32_t execution_time;
+#endif
         IccEgmValue egm_value = 0;
 #if defined(__EMULATOR__) && defined(ICC_VERILATOR_TEST_SCENARIO)
         bool relay_before_step[ICC_NETWORK_1D_CELL_COUNT];
@@ -302,8 +357,19 @@ int main(void)
 #endif
         icc_network_1d_step(&network);
         if (egm_configuration_matches) {
-            egm_value = icc_egm_1d5c_compute(&network);
+            if (!icc_egm_compute(&egm, &network, &egm_value)) {
+                return 1;
+            }
         }
+#ifdef __EMULATOR__
+        iteration_end = rdtime();
+        execution_time = iteration_end - iteration_start;
+#if defined(__EMULATOR__) && defined(ICC_VERILATOR_TEST_SCENARIO)
+        if (execution_time > maximum_execution_time) {
+            maximum_execution_time = execution_time;
+        }
+#endif
+#endif
         sample++;
 
 #ifdef __EMULATOR__
@@ -317,9 +383,10 @@ int main(void)
             previous_path_states,
             relay_before_step);
 #ifdef ICC_VERILATOR_EGM_TRACE
-        printf("EGM,%u,%u,%" PRId32 "\n",
+        printf("EGM,%u,%u,%d,%" PRId32 "\n",
                (unsigned)sample,
                (unsigned)(sample * ICC_TIMESTEP_MS),
+               (int)icc_egm_electrode_x_um(&egm),
                egm_value);
 #else
         (void)egm_value;
@@ -331,10 +398,11 @@ int main(void)
             previous_path_states[index] = network.paths[index].state;
         }
         if (sample >= ICC_VERILATOR_TEST_SAMPLES) {
-            printf("TIMING,%u,%u,%u\n",
+            printf("TIMING,%u,%u,%u,%u\n",
                    (unsigned)minimum_measured_period,
                    (unsigned)maximum_measured_period,
-                   (unsigned)maximum_release_lateness);
+                   (unsigned)maximum_release_lateness,
+                   (unsigned)maximum_execution_time);
             printf("DONE,%u,%u\n",
                    (unsigned)sample,
                    (unsigned)(sample * ICC_TIMESTEP_MS));
@@ -346,6 +414,8 @@ int main(void)
             iteration_start,
             measured_period,
             release_lateness,
+            execution_time,
+            icc_egm_electrode_x_um(&egm),
             &network,
             egm_value);
 #endif

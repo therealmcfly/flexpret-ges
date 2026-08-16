@@ -2,3 +2,7 @@
 /build-*/
 /bin/
 /generated/
+
+# Python tool caches
+__pycache__/
+*.py[cod]

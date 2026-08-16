@@ -35,14 +35,22 @@ if (NOT ICC_MODEL_TIMESTEP_MS IN_LIST ICC_MODEL_SUPPORTED_TIMESTEPS)
     "ICC_MODEL_TIMESTEP_MS must be one of: 200, 100, 50, 20, 10")
 endif()
 
+set(ICC_EGM_ELECTRODE_X_UM "6000" CACHE STRING
+  "Initial EGM electrode x-position in micrometres")
+set(ICC_EGM_SUPPORTED_ELECTRODE_X_UM 0 6000 12000 18000 24000)
+if (NOT ICC_EGM_ELECTRODE_X_UM IN_LIST ICC_EGM_SUPPORTED_ELECTRODE_X_UM)
+  message(FATAL_ERROR
+    "ICC_EGM_ELECTRODE_X_UM must be one of: 0, 6000, 12000, 18000, 24000")
+endif()
+
 if (NOT "${TARGET}" STREQUAL "fpga" AND NOT "${TARGET}" STREQUAL "emulator")
   message(FATAL_ERROR "TARGET must be either 'fpga' or 'emulator'")
 endif()
 
 set(EGM_GENERATED_DIR
-  "${CMAKE_CURRENT_SOURCE_DIR}/generated/egm_1d5c")
+  "${CMAKE_CURRENT_SOURCE_DIR}/generated/egm_relative")
 set(EGM_SELECTED_HEADER
-  "${EGM_GENERATED_DIR}/egm_lut_${ICC_MODEL_TIMESTEP_MS}ms.h")
+  "${EGM_GENERATED_DIR}/egm_relative_lut.h")
 if (NOT EXISTS "${EGM_SELECTED_HEADER}")
   message(FATAL_ERROR
     "Missing generated EGM table: ${EGM_SELECTED_HEADER}\n"
@@ -55,6 +63,7 @@ add_executable(icc-model ${APP_SOURCES})
 
 target_compile_definitions(icc-model PRIVATE
   ICC_TIMESTEP_MS=${ICC_MODEL_TIMESTEP_MS}U
+  ICC_EGM_INITIAL_ELECTRODE_X_UM=${ICC_EGM_ELECTRODE_X_UM}
 )
 
 target_include_directories(icc-model PRIVATE

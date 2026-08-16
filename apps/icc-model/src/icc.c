@@ -145,7 +145,9 @@ bool icc_is_active(const Icc *cell)
 {
     return cell != NULL &&
            cell->initialized &&
-           cell->state == ICC_Q1_UPSTROKE;
+           (cell->state == ICC_Q1_UPSTROKE ||
+            cell->state == ICC_Q2_PLATEAU ||
+            cell->state == ICC_Q3_REPOLARIZATION);
 }
 
 void icc_stimulate(Icc *cell)

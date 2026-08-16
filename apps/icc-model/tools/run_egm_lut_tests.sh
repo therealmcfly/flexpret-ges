@@ -8,47 +8,25 @@ TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
 gcc -std=c11 -Wall -Wextra -Werror \
-    "${SCRIPT_DIR}/generate_egm_lut.c" \
-    -lm \
+    "${SCRIPT_DIR}/generate_egm_lut.c" -lm \
     -o "${TEMP_DIR}/generate-egm-lut"
 
-mkdir -p "${TEMP_DIR}/generated-first"
-mkdir -p "${TEMP_DIR}/generated-second"
-"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/generated-first" >/dev/null
-"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/generated-second" >/dev/null
+mkdir -p "${TEMP_DIR}/first" "${TEMP_DIR}/second"
+"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/first" >/dev/null
+"${TEMP_DIR}/generate-egm-lut" "${TEMP_DIR}/second" >/dev/null
+diff -ru "${TEMP_DIR}/first" "${TEMP_DIR}/second"
 
-diff -ru "${TEMP_DIR}/generated-first" "${TEMP_DIR}/generated-second"
+test "$(wc -l < "${TEMP_DIR}/first/egm_relative_lut.csv")" -eq 802
+test "$(find "${TEMP_DIR}/first" -maxdepth 1 -type f | wc -l)" -eq 3
 
-test "$(wc -l < "${TEMP_DIR}/generated-first/egm_five_electrode_waveforms.csv")" \
-    -eq 3701
-test "$(wc -l < "${TEMP_DIR}/generated-first/egm_five_electrode_summary.csv")" \
-    -eq 26
-awk -F, '
-    NR == 1 { next }
-    {
-        key = $1 FS $2 FS $5
-        if (seen[key]++) {
-            exit 1
-        }
-    }
-' "${TEMP_DIR}/generated-first/egm_five_electrode_waveforms.csv"
+gcc -std=c11 -Wall -Wextra -Werror \
+    -I"${TEMP_DIR}/first" \
+    "${APP_DIR}/tests/test_egm_lut.c" -lm \
+    -o "${TEMP_DIR}/test-egm-lut"
+"${TEMP_DIR}/test-egm-lut"
 
-for specification in \
-    "200 5" \
-    "100 10" \
-    "50 20" \
-    "20 50" \
-    "10 100"
-do
-    read -r timestep_ms step_count <<<"${specification}"
-    gcc -std=c11 -Wall -Wextra -Werror \
-        -I"${TEMP_DIR}/generated-first" \
-        -DEGM_LUT_HEADER=\"egm_lut_${timestep_ms}ms.h\" \
-        -DEXPECTED_EGM_TIMESTEP_MS=${timestep_ms}U \
-        -DEXPECTED_EGM_STEP_COUNT=${step_count}U \
-        "${APP_DIR}/tests/test_egm_lut.c" \
-        -o "${TEMP_DIR}/test-egm-lut-${timestep_ms}"
-    "${TEMP_DIR}/test-egm-lut-${timestep_ms}"
-done
-
-echo "EGM lookup generator tests passed"
+first_hash="$(sha256sum "${TEMP_DIR}/first/egm_relative_lut.h" | awk '{print $1}')"
+second_hash="$(sha256sum "${TEMP_DIR}/second/egm_relative_lut.h" | awk '{print $1}')"
+file_size="$(wc -c < "${TEMP_DIR}/first/egm_relative_lut.h")"
+echo "REPRODUCIBILITY,first_sha256,${first_hash},second_sha256,${second_hash},header_file_bytes,${file_size},entries,801,table_bytes,3204"
+echo "EGM relative lookup generator tests passed"

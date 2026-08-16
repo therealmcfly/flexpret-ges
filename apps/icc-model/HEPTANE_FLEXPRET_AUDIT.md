@@ -124,10 +124,20 @@ estimate, not yet as a validated WCET bound.
 7. Validate complete ICC cell, path, network, and EGM entry points.
 8. Archive every configuration and result with immutable commit identifiers.
 
-## Consequence for the EGM design
+## EGM analysis boundary
 
-The target EGM should use fixed-size data, fixed control flow, 32-bit integer
-addition and shifts, compile-time geometry, and no floating point, division,
-square root, dynamic allocation, or compiler arithmetic helpers. This reduces
-both execution cost and the effort required to establish a trustworthy WCET
-model.
+The relative-potential EGM runtime has fixed-size state, four statically
+bounded path evaluations, deterministic integer indexing, and a 3,204-byte
+constant table. Object-level inspection on 2026-08-15 found no floating-point,
+division, modulo, square-root, or 64-bit arithmetic instruction/helper in
+`src/egm.c` at any supported timestep. The complete ELF retains four 32-bit
+division/modulo helpers outside EGM for network configuration validation and
+integer output formatting.
+
+Verilator observed a maximum 25,520 ns ICC/path/EGM execution interval, but
+that measurement is not a HEPTANE result or formal WCET bound. A future
+HEPTANE campaign must analyze the exact deployed ELF, model the constant-table
+loads from DSPM, include the four bounded contributions and error branches,
+and validate the FlexPRET pipeline model against Verilator and DE1-SoC
+measurements. The evidence needed to select entry points and compiler helpers
+is stored under `validation/egm_relative/`.

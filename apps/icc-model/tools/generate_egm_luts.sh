@@ -5,18 +5,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_ROOT="${APP_DIR}/generated"
-OUTPUT_DIR="${OUTPUT_ROOT}/egm_1d5c"
+OUTPUT_DIR="${OUTPUT_ROOT}/egm_relative"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
-if [[ "${OUTPUT_DIR}" != "${APP_DIR}/generated/egm_1d5c" ]]; then
+if [[ "${OUTPUT_DIR}" != "${APP_DIR}/generated/egm_relative" ]]; then
     echo "refusing to replace unexpected output directory: ${OUTPUT_DIR}" >&2
     exit 1
 fi
 
 gcc -std=c11 -Wall -Wextra -Werror \
-    "${SCRIPT_DIR}/generate_egm_lut.c" \
-    -lm \
+    "${SCRIPT_DIR}/generate_egm_lut.c" -lm \
     -o "${TEMP_DIR}/generate-egm-lut"
 
 mkdir -p "${TEMP_DIR}/generated"
@@ -38,4 +37,4 @@ mkdir -p "${OUTPUT_ROOT}"
 rm -rf "${OUTPUT_DIR}"
 mv "${TEMP_DIR}/generated" "${OUTPUT_DIR}"
 
-echo "EGM lookup tables and result data generated in ${OUTPUT_DIR}"
+echo "EGM relative lookup generated in ${OUTPUT_DIR}"

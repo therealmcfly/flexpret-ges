@@ -12,14 +12,12 @@ do
     gcc -std=c11 -Wall -Wextra -Werror \
         -DICC_TIMESTEP_MS=${timestep_ms}U \
         -I"${APP_DIR}/inc" \
-        -I"${APP_DIR}/generated/egm_relative" \
-        "${APP_DIR}/src/egm.c" \
         "${APP_DIR}/src/icc.c" \
         "${APP_DIR}/src/path.c" \
         "${APP_DIR}/src/network.c" \
-        "${APP_DIR}/tests/test_egm_runtime.c" \
-        -o "${TEMP_DIR}/test-egm-runtime-${timestep_ms}"
-    "${TEMP_DIR}/test-egm-runtime-${timestep_ms}"
+        "${APP_DIR}/tests/test_icc.c" \
+        -o "${TEMP_DIR}/test-icc-${timestep_ms}"
+    "${TEMP_DIR}/test-icc-${timestep_ms}"
 done
 
-echo "EGM relative runtime tests passed for all supported timesteps"
+echo "ICC, path, and network host tests passed for all supported timesteps"
