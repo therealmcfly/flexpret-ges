@@ -14,7 +14,7 @@ int recv_from_gut()
 	uint8_t hi = uart_receive(UART1_BASE);
 
 	int16_t value = (int16_t)((hi << 8) | lo);
-	// printf("rcv: %d\n", value);
+	printf("rcv: %d\n", value);
 
 	// Convert pulse to one of 8 LED bits
 	uint8_t ledmask = pulse_to_ledmask(value);

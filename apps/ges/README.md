@@ -57,7 +57,7 @@ If the DE1-SoC has been power-cycled and the FPGA source has not changed, do
 not rerun the full Mega task. Open Quartus Programmer directly from WSL:
 
 ```bash
-/mnt/c/intelFPGA/18.1/quartus/bin64/quartus_pgmw.exe
+/mnt/c/intelFPGA_lite/18.1/quartus/bin64/quartus_pgmw.exe
 ```
 
 In Quartus Programmer, select the DE1-SoC USB-Blaster hardware and add the
@@ -137,6 +137,16 @@ These defaults come from `env.bash`.
 
 If `./bin/ges` cannot find `/dev/ttyUSB0`, attach the USB-UART adapter to WSL
 from Windows PowerShell.
+
+If `usbipd` is not installed, install `usbipd-win` from Windows PowerShell
+running as Administrator:
+
+```powershell
+winget install --interactive --exact dorssel.usbipd-win
+```
+
+Close and reopen PowerShell after installation so `usbipd` is available on
+`PATH`.
 
 First list USB devices:
 
