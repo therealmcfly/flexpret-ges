@@ -1,0 +1,4 @@
+NUMERICAL,entries,801,bytes,3204,scale,10000000,max_abs_error,4.999771405223008e-08,worst_abs_position_um,21780,max_meaningful_relative_error,1.4873562175373967e-06,worst_relative_position_um,-23640,tolerance,5.0000100000000003e-08
+EGM relative lookup numerical validation passed
+REPRODUCIBILITY,first_sha256,5f35a1066bcd0b8a745c1545eaeb1fd03b233a0b4c0892d18eeb7cca3f2623bd,second_sha256,5f35a1066bcd0b8a745c1545eaeb1fd03b233a0b4c0892d18eeb7cca3f2623bd,header_file_bytes,11082,entries,801,table_bytes,3204
+EGM relative lookup generator tests passed
