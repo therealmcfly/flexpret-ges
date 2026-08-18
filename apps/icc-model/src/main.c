@@ -2,6 +2,7 @@
 
 #include <flexpret/csrs.h>
 #include <flexpret/time.h>
+#include <flexpret/uart.h>
 
 #include "app.h"
 
@@ -16,7 +17,7 @@
 static bool initialize_app(IccModelApp *app)
 {
     static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
-        0, 0, 0, 0, 20
+        0, 0, 0, 0, 23
     };
     static const uint16_t delays[ICC_NETWORK_1D_PATH_COUNT] = {
         1000U, 1000U, 1000U, 1000U
@@ -31,6 +32,24 @@ static bool initialize_app(IccModelApp *app)
         delays,
         gaps,
         ICC_EGM_INITIAL_ELECTRODE_X_UM);
+}
+
+static void send_egm_uart2(IccEgmValue egm_value)
+{
+    int32_t scaled_value = egm_value >> 12;
+    uint16_t raw_value;
+
+    if (scaled_value > INT16_MAX) {
+        scaled_value = INT16_MAX;
+    } else if (scaled_value < INT16_MIN) {
+        scaled_value = INT16_MIN;
+    }
+    raw_value = (uint16_t)(int16_t)scaled_value;
+
+    uart_send(UART2_BASE, UINT8_C(0xAA));
+    uart_send(UART2_BASE, UINT8_C(0x55));
+    uart_send(UART2_BASE, (uint8_t)(raw_value & UINT16_C(0xFF)));
+    uart_send(UART2_BASE, (uint8_t)(raw_value >> 8));
 }
 
 int main(void)
@@ -62,9 +81,14 @@ int main(void)
     next_release = clock_probe_end + ICC_PERIOD_NS;
     while (1) {
         fp_delay_until(next_release);
+        fp_nop;
+        fp_nop;
+        fp_nop;
+        fp_nop;
         next_release += ICC_PERIOD_NS;
         if (!icc_model_app_step(&app, &egm_value)) {
             return 1;
         }
+        send_egm_uart2(egm_value);
     }
 }
