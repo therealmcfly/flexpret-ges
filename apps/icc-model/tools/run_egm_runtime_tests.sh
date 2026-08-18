@@ -20,6 +20,19 @@ do
         "${APP_DIR}/tests/test_egm_runtime.c" \
         -o "${TEMP_DIR}/test-egm-runtime-${timestep_ms}"
     "${TEMP_DIR}/test-egm-runtime-${timestep_ms}"
+
+    gcc -std=c11 -Wall -Wextra -Werror \
+        -DICC_TIMESTEP_MS=${timestep_ms}U \
+        -I"${APP_DIR}/inc" \
+        -I"${APP_DIR}/generated/egm_relative" \
+        "${APP_DIR}/src/app.c" \
+        "${APP_DIR}/src/egm.c" \
+        "${APP_DIR}/src/icc.c" \
+        "${APP_DIR}/src/path.c" \
+        "${APP_DIR}/src/network.c" \
+        "${APP_DIR}/tests/test_app.c" \
+        -o "${TEMP_DIR}/test-app-${timestep_ms}"
+    "${TEMP_DIR}/test-app-${timestep_ms}"
 done
 
-echo "EGM relative runtime tests passed for all supported timesteps"
+echo "EGM relative runtime and application tests passed for all supported timesteps"

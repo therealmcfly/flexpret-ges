@@ -39,6 +39,12 @@ The electrode may be moved at runtime among the five cell positions: `0`,
 `6000`, `12000`, `18000`, and `24000 um`. Moving it does not regenerate the
 table and does not rebuild the application.
 
+The build uses separate entry points for separate purposes. `src/main.c` is
+the minimal FPGA scheduler, `src/emulator_main.c` provides continuous CSV
+telemetry, and `src/verilator_test_main.c` contains finite validation scenarios.
+All three use the shared initialization and model-step API in `src/app.c`.
+Test scenarios are therefore absent from the FPGA production translation unit.
+
 ## Environment setup
 
 The verified environment is WSL Ubuntu with the FlexPRET repository at:
@@ -205,17 +211,18 @@ To cross-build and inspect all supported timesteps:
 ./tools/run_egm_fpga_checks.sh
 ```
 
-All five FPGA builds passed on 2026-08-15. The largest build was the 100 ms
+All five FPGA builds passed after the entry-point refactor on 2026-08-18. The
+largest build was the 100 ms
 configuration:
 
 | Quantity | Bytes |
 |---|---:|
-| ISPM used | 15,904 |
+| ISPM used | 16,036 |
 | DSPM static used | 6,272 |
 | Reserved stack | 2,048 |
-| Total SPM used or reserved | 24,224 |
+| Total SPM used or reserved | 24,356 |
 | Combined configured ISPM + DSPM | 131,072 |
-| Remaining SPM | 106,848 |
+| Remaining SPM | 106,716 |
 
 The linker places the 3,204-byte constant table in `.data`, so its load image
 is present in ISPM and its runtime copy is present in DSPM. The table symbol

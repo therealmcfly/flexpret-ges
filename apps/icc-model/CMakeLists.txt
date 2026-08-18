@@ -58,8 +58,28 @@ if (NOT EXISTS "${EGM_SELECTED_HEADER}")
     "  ./tools/generate_egm_luts.sh")
 endif()
 
-file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-add_executable(icc-model ${APP_SOURCES})
+set(ICC_MODEL_COMMON_SOURCES
+  src/app.c
+  src/egm.c
+  src/icc.c
+  src/network.c
+  src/path.c
+)
+
+# Keep production, interactive-emulator, and finite validation entry points
+# independent. Test scenarios never enter the FPGA translation unit.
+if ("${TARGET}" STREQUAL "fpga")
+  set(ICC_MODEL_ENTRY_POINT src/main.c)
+elseif ("${ICC_VERILATOR_TEST_SCENARIO}" STREQUAL "")
+  set(ICC_MODEL_ENTRY_POINT src/emulator_main.c)
+else()
+  set(ICC_MODEL_ENTRY_POINT src/verilator_test_main.c)
+endif()
+
+add_executable(icc-model
+  ${ICC_MODEL_ENTRY_POINT}
+  ${ICC_MODEL_COMMON_SOURCES}
+)
 
 target_compile_definitions(icc-model PRIVATE
   ICC_TIMESTEP_MS=${ICC_MODEL_TIMESTEP_MS}U

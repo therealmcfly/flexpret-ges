@@ -18,13 +18,23 @@ inc/icc_calibration.h      timestep-specific ICC increments
 inc/path.h                 bidirectional path state
 inc/network.h              fixed five-cell topology
 inc/egm.h                  runtime electrode and EGM API
+inc/app.h                  shared application state and step API
 src/icc.c                  ICC state machine
 src/path.c                 propagation state machine
 src/network.c              cell-then-path update order
 src/egm.c                  relative-coordinate LUT indexing and sum
-src/main.c                 FlexPRET scheduler and target output
+src/app.c                  shared network/EGM initialization and update
+src/main.c                 minimal FPGA production scheduler
+src/emulator_main.c        continuous emulator CSV output
+src/verilator_test_main.c  finite scenario and timing harness
 tools/generate_egm_lut.c   host double-precision LUT generator
 ```
+
+CMake selects exactly one entry point. FPGA builds compile `main.c`; ordinary
+emulator builds compile `emulator_main.c`; emulator builds configured with
+`ICC_VERILATOR_TEST_SCENARIO` compile `verilator_test_main.c`. Consequently,
+the FPGA translation unit contains no scenario tables, forced-state setup,
+trace formatting, or finite-test termination code.
 
 ## ICC voltage representation
 
@@ -177,9 +187,10 @@ not alter the FPGA production loop.
 
 ## Target memory and instructions
 
-At 100 ms, the largest measured FPGA build used 15,904 bytes of ISPM and 6,272
+At 100 ms, the largest measured FPGA build used 16,036 bytes of ISPM and 6,272
 bytes of static DSPM, with a 2,048-byte reserved stack. Total SPM used or
-reserved was 24,224 of 131,072 bytes.
+reserved was 24,356 of 131,072 bytes. These figures were remeasured after the
+entry-point separation on 2026-08-18.
 
 The FlexPRET linker copies read-only `.data` from an ISPM load image to DSPM at
 startup. The logical 3,204-byte table therefore consumes space in both regions.
