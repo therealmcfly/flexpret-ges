@@ -8,12 +8,35 @@
 #define SYNC0 0xAA
 #define SYNC1 0x55
 
-int recv_from_gut()
+int recv_from_gut(void)
 {
-	uint8_t lo = uart_receive(UART1_BASE);
-	uint8_t hi = uart_receive(UART1_BASE);
+	uint8_t byte;
+	uint8_t lo;
+	uint8_t hi;
+	uint16_t raw;
+	int16_t value;
 
-	int16_t value = (int16_t)((hi << 8) | lo);
+	/* Synchronize to the ICC EGM frame: AA 55 LO HI. */
+	while (1)
+	{
+		byte = uart_receive(UART1_BASE);
+		if (byte != SYNC0)
+		{
+			continue;
+		}
+
+		byte = uart_receive(UART1_BASE);
+		if (byte == SYNC1)
+		{
+			break;
+		}
+	}
+
+	lo = uart_receive(UART1_BASE);
+	hi = uart_receive(UART1_BASE);
+	raw = (uint16_t)lo | ((uint16_t)hi << 8);
+	value = (int16_t)raw;
+
 	printf("rcv: %d\n", value);
 
 	// Convert pulse to one of 8 LED bits
