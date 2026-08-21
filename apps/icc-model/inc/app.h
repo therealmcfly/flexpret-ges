@@ -10,6 +10,7 @@
 typedef struct {
     IccNetwork1d network;
     IccEgm egm;
+    uint8_t pacing_lead_cell_index;
     bool initialized;
 } IccModelApp;
 
@@ -21,5 +22,6 @@ bool icc_model_app_init(
     int32_t electrode_x_um);
 
 bool icc_model_app_step(IccModelApp *app, IccEgmValue *egm_value);
+bool icc_model_app_apply_pacing(IccModelApp *app);
 
 #endif
