@@ -35,6 +35,48 @@ if (NOT ICC_MODEL_TIMESTEP_MS IN_LIST ICC_MODEL_SUPPORTED_TIMESTEPS)
     "ICC_MODEL_TIMESTEP_MS must be one of: 200, 100, 50, 20, 10")
 endif()
 
+set(ICC_MODEL_SUPPORTED_INTERVALS -1 0 15 20 23 26 30 40)
+foreach(cell_number RANGE 1 5)
+  set(interval_option "ICC_CELL${cell_number}_INTERVAL_S")
+  if (cell_number EQUAL 1)
+    set(interval_default "20")
+  else()
+    set(interval_default "0")
+  endif()
+  set(${interval_option} "${interval_default}" CACHE STRING
+    "Cell ${cell_number} intrinsic activation interval in seconds")
+  set_property(CACHE ${interval_option} PROPERTY STRINGS
+    -1 0 15 20 23 26 30 40)
+  if (NOT "${${interval_option}}" IN_LIST ICC_MODEL_SUPPORTED_INTERVALS)
+    message(FATAL_ERROR
+      "${interval_option} must be one of: -1, 0, 15, 20, 23, 26, 30, 40")
+  endif()
+endforeach()
+
+foreach(path_number RANGE 1 4)
+  set(delay_option "ICC_PATH${path_number}_DELAY_MS")
+  set(gap_option "ICC_PATH${path_number}_GAP_MM")
+  set(${delay_option} "1000" CACHE STRING
+    "Path ${path_number} propagation delay in milliseconds")
+  set(${gap_option} "6" CACHE STRING
+    "Path ${path_number} gap in millimetres")
+  if (NOT "${${delay_option}}" STREQUAL "1000")
+    message(FATAL_ERROR
+      "${delay_option} must be 1000 for the current EGM LUT")
+  endif()
+  if (NOT "${${gap_option}}" STREQUAL "6")
+    message(FATAL_ERROR
+      "${gap_option} must be 6 for the current EGM LUT")
+  endif()
+endforeach()
+
+set(ICC_MODEL_UART "2" CACHE STRING
+  "UART used for EGM transmission and pacing reception (1 or 2)")
+set_property(CACHE ICC_MODEL_UART PROPERTY STRINGS 1 2)
+if (NOT ICC_MODEL_UART STREQUAL "1" AND NOT ICC_MODEL_UART STREQUAL "2")
+  message(FATAL_ERROR "ICC_MODEL_UART must be 1 or 2; UART0 is reserved")
+endif()
+
 set(ICC_EGM_ELECTRODE_X_UM "6000" CACHE STRING
   "Initial EGM electrode x-position in micrometres")
 set(ICC_EGM_SUPPORTED_ELECTRODE_X_UM 0 6000 12000 18000 24000)
@@ -58,12 +100,46 @@ if (NOT EXISTS "${EGM_SELECTED_HEADER}")
     "  ./tools/generate_egm_luts.sh")
 endif()
 
-file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-add_executable(icc-model ${APP_SOURCES})
+set(ICC_MODEL_COMMON_SOURCES
+  src/app.c
+  src/egm.c
+  src/icc.c
+  src/network.c
+  src/path.c
+)
+
+# Keep production, interactive-emulator, and finite validation entry points
+# independent. Test scenarios never enter the FPGA translation unit.
+if ("${TARGET}" STREQUAL "fpga")
+  set(ICC_MODEL_ENTRY_POINT src/main.c)
+elseif ("${ICC_VERILATOR_TEST_SCENARIO}" STREQUAL "")
+  set(ICC_MODEL_ENTRY_POINT src/emulator_main.c)
+else()
+  set(ICC_MODEL_ENTRY_POINT src/verilator_test_main.c)
+endif()
+
+add_executable(icc-model
+  ${ICC_MODEL_ENTRY_POINT}
+  ${ICC_MODEL_COMMON_SOURCES}
+)
 
 target_compile_definitions(icc-model PRIVATE
   ICC_TIMESTEP_MS=${ICC_MODEL_TIMESTEP_MS}U
   ICC_EGM_INITIAL_ELECTRODE_X_UM=${ICC_EGM_ELECTRODE_X_UM}
+  ICC_CELL1_INTERVAL_S=${ICC_CELL1_INTERVAL_S}
+  ICC_CELL2_INTERVAL_S=${ICC_CELL2_INTERVAL_S}
+  ICC_CELL3_INTERVAL_S=${ICC_CELL3_INTERVAL_S}
+  ICC_CELL4_INTERVAL_S=${ICC_CELL4_INTERVAL_S}
+  ICC_CELL5_INTERVAL_S=${ICC_CELL5_INTERVAL_S}
+  ICC_PATH1_DELAY_MS=${ICC_PATH1_DELAY_MS}U
+  ICC_PATH2_DELAY_MS=${ICC_PATH2_DELAY_MS}U
+  ICC_PATH3_DELAY_MS=${ICC_PATH3_DELAY_MS}U
+  ICC_PATH4_DELAY_MS=${ICC_PATH4_DELAY_MS}U
+  ICC_PATH1_GAP_MM=${ICC_PATH1_GAP_MM}U
+  ICC_PATH2_GAP_MM=${ICC_PATH2_GAP_MM}U
+  ICC_PATH3_GAP_MM=${ICC_PATH3_GAP_MM}U
+  ICC_PATH4_GAP_MM=${ICC_PATH4_GAP_MM}U
+  ICC_MODEL_UART=${ICC_MODEL_UART}
 )
 
 target_include_directories(icc-model PRIVATE

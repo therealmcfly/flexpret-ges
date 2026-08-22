@@ -39,6 +39,12 @@ The electrode may be moved at runtime among the five cell positions: `0`,
 `6000`, `12000`, `18000`, and `24000 um`. Moving it does not regenerate the
 table and does not rebuild the application.
 
+The build uses separate entry points for separate purposes. `src/main.c` is
+the minimal FPGA scheduler, `src/emulator_main.c` provides continuous CSV
+telemetry, and `src/verilator_test_main.c` contains finite validation scenarios.
+All three use the shared initialization and model-step API in `src/app.c`.
+Test scenarios are therefore absent from the FPGA production translation unit.
+
 ## Environment setup
 
 The verified environment is WSL Ubuntu with the FlexPRET repository at:
@@ -181,7 +187,49 @@ boundary interpretation, and reproduction details are recorded in
 
 ## Build for the FPGA
 
-Generate the table first, then use a timestep-specific build directory:
+Running ICC-model on the DE1-SoC has three separate stages:
+
+1. Build and program the FlexPRET bootloader FPGA image.
+2. Compile ICC-model into a FlexPRET application image.
+3. Send the application image to the running bootloader over UART0.
+
+### 1. Build and program the FlexPRET bootloader
+
+From VS Code, run:
+
+```text
+Ctrl+Shift+P
+Tasks: Run Task
+Mega: Build and Synthesize Bootloader FPGA
+```
+
+The task builds the bootloader SDK, generates the DE1-SoC FlexPRET hardware,
+runs Quartus synthesis, and opens Quartus Programmer. In Quartus Programmer:
+
+1. Select the DE1-SoC USB-Blaster hardware (`DE-SoC [USB-1]`) and JTAG mode.
+2. Add the generated image:
+
+   ```text
+   Z:/home/eugene/gastric-pacemaker/fp-ges/build/fpga/de1-soc/fp-bootloader/de1soc_bootloader.sof
+   ```
+
+3. Check `Program/Configure` for the `5CSEMA5F31` device.
+4. Click `Start`.
+
+The full synthesis task is only required after changing FlexPRET or bootloader
+source. After a power cycle, the existing `.sof` can be programmed by opening
+Quartus Programmer directly:
+
+```bash
+/mnt/c/intelFPGA_lite/18.1/quartus/bin64/quartus_pgmw.exe
+```
+
+Pressing `KEY[3]` resets FlexPRET but does not erase the programmed FPGA image,
+so a reset alone does not require another synthesis or Quartus programming run.
+
+### 2. Compile ICC-model
+
+For a normal build using all default settings:
 
 ```bash
 cd /home/eugene/gastric-pacemaker/fp-ges
@@ -189,12 +237,110 @@ source env.bash
 export RISCV_TOOL_PATH_PREFIX=/opt/xpack-riscv-none-elf-gcc-14.2.0-2
 cd apps/icc-model
 ./tools/generate_egm_luts.sh
-cmake -S . -B build-fpga-200ms \
-  -DTARGET=fpga \
-  -DICC_MODEL_TIMESTEP_MS=200 \
-  -DICC_EGM_ELECTRODE_X_UM=6000
-cmake --build build-fpga-200ms --target icc-model
+cmake -S . -B build
+cmake --build build
 ```
+
+`cmake -S . -B build` reads `CMakeLists.txt`, validates the configuration,
+stores the selected values in `build/CMakeCache.txt`, and generates the build
+files. It does not compile or flash the application.
+
+`cmake --build build` compiles the default targets. This project has one main
+application target, `icc-model`, so `--target icc-model` is optional. The build
+also produces the `.mem` image required by the FlexPRET bootloader.
+
+The build creates `build/icc-model.mem` and the generated flash launcher
+`bin/icc-model`.
+
+### 3. Load ICC-model through the bootloader
+
+Connect a 3.3 V USB-UART adapter to FlexPRET UART0. TX and RX must be crossed;
+the wiring and USB attachment details are in
+[Hardware programming and application flashing](#hardware-programming-and-application-flashing).
+
+Before loading the application:
+
+1. Set `SW[0]` to `ON` / `1` to select dynamic UART loading.
+2. Press `KEY[3]` to reset FlexPRET into the bootloader.
+3. Keep `SW[0]` high while running:
+
+   ```bash
+   ./bin/icc-model
+   ```
+
+The launcher serializes `build/icc-model.mem`, transfers it over UART0 at
+115200 baud, and opens `picocom`. Exit with `Ctrl+A`, followed by `Ctrl+X`.
+
+The FPGA application configuration defaults are:
+
+- Cell 1 interval: `20` seconds;
+- Cell 2-5 intervals: `0` seconds;
+- all four path delays: `1000` ms;
+- all four path gaps: `6` mm;
+- EGM and pacing UART: UART2;
+- EGM electrode and pacing lead: `6000` micrometres (Cell 2);
+- timestep: `200` ms.
+
+After initialization, ICC-model prints the effective configuration once on
+UART0. The binary EGM/pacing UART remains free of diagnostic text. With the
+defaults, the console begins with:
+
+```text
+--------------- ICC Model on FlexPRET Start ---------------
+Timestep:             200 ms
+Cell intervals:       [20, 0, 0, 0, 0] s
+Path delays:          [1000, 1000, 1000, 1000] ms
+Path gaps:            [6, 6, 6, 6] mm
+Electrode position:   6000 um
+Electrode cell:       Cell 2
+Pacing-lead cell:     Cell 2
+EGM/pacing UART:      UART2
+EGM frame:            AA 55 + little-endian int16
+Pacing frame:         AA 55 01
+ICC Model Start!
+```
+
+ICC-model ignores unframed UART bytes. A pacing request is accepted only after
+the complete `AA 55 01` frame is received. GES sends the fixed value `1` for
+each pacing attempt.
+
+Cell intervals, path geometry, and UART can be set when configuring:
+
+```bash
+cmake -S . -B build-fpga-50ms \
+  -DTARGET=fpga \
+  -DICC_MODEL_TIMESTEP_MS=50 \
+  -DICC_EGM_ELECTRODE_X_UM=0 \
+  -DICC_CELL1_INTERVAL_S=20 \
+  -DICC_CELL2_INTERVAL_S=0 \
+  -DICC_CELL3_INTERVAL_S=0 \
+  -DICC_CELL4_INTERVAL_S=0 \
+  -DICC_CELL5_INTERVAL_S=0 \
+  -DICC_PATH1_DELAY_MS=1000 \
+  -DICC_PATH2_DELAY_MS=1000 \
+  -DICC_PATH3_DELAY_MS=1000 \
+  -DICC_PATH4_DELAY_MS=1000 \
+  -DICC_PATH1_GAP_MM=6 \
+  -DICC_PATH2_GAP_MM=6 \
+  -DICC_PATH3_GAP_MM=6 \
+  -DICC_PATH4_GAP_MM=6 \
+  -DICC_MODEL_UART=2
+cmake --build build-fpga-50ms
+```
+
+Supported cell intervals are `-1, 0, 15, 20, 23, 26, 30, 40` seconds.
+Use `0` for no intrinsic activation while retaining pacing response. A cell
+configured as `-1` ignores pacing as well as intrinsic activation. UART1 and
+UART2 are supported; UART0 remains reserved for the bootloader and console.
+
+The current EGM LUT specialization requires every delay to remain `1000` ms
+and every gap to remain `6` mm. CMake rejects other path values rather than
+building an application with inconsistent EGM geometry. Baud rate and the
+`AA 55` plus little-endian `int16` packet format are intentionally fixed.
+
+CMake stores these values in each build directory. Reconfiguring without a
+`-D` option retains that directory's previous value; `cmake --build` uses
+the cached configuration and does not restore defaults.
 
 The initial electrode value is a startup setting only. Target code can call
 `icc_egm_set_electrode_x_um()` later without rebuilding or regenerating.
@@ -205,17 +351,18 @@ To cross-build and inspect all supported timesteps:
 ./tools/run_egm_fpga_checks.sh
 ```
 
-All five FPGA builds passed on 2026-08-15. The largest build was the 100 ms
+All five FPGA builds passed after the entry-point refactor on 2026-08-18. The
+largest build was the 100 ms
 configuration:
 
 | Quantity | Bytes |
 |---|---:|
-| ISPM used | 15,904 |
+| ISPM used | 16,036 |
 | DSPM static used | 6,272 |
 | Reserved stack | 2,048 |
-| Total SPM used or reserved | 24,224 |
+| Total SPM used or reserved | 24,356 |
 | Combined configured ISPM + DSPM | 131,072 |
-| Remaining SPM | 106,848 |
+| Remaining SPM | 106,716 |
 
 The linker places the 3,204-byte constant table in `.data`, so its load image
 is present in ISPM and its runtime copy is present in DSPM. The table symbol
@@ -276,23 +423,69 @@ sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,execution_time_ns,egm_
 
 ## Hardware programming and application flashing
 
-No board was flashed during the 2026-08-15 validation.
+The original 2026-08-15 software validation did not flash a board. Subsequent
+physical UART2 pacing tests flashed the FPGA application and verified repeated
+pacing responses on the DE1-SoC.
 
 To prepare the DE1-SoC manually:
 
 1. Connect power, USB-Blaster, and a 3.3 V USB-UART adapter.
-2. Program the FlexPRET bootloader `.sof` with Quartus Programmer.
-3. Connect adapter TX to FlexPRET UART0 RX, adapter RX to UART0 TX, and GND to
-   GND. Do not connect a 5 V UART signal.
-4. Attach the adapter to WSL and confirm its device, normally `/dev/ttyUSB0`.
-5. Grant serial access through the appropriate Linux group, then sign out and
-   back in. `chmod +x` is not a serial-port permission fix.
-6. Build the FPGA target as shown above.
-7. Flash and open its console with:
+2. Program the FlexPRET bootloader `.sof` using the procedure above.
+3. Wire the adapter to FlexPRET UART0 with TX and RX crossed:
+
+   ```text
+   USB-UART TX  -> GPIO_0[1]  FlexPRET UART0 RX
+   USB-UART RX  -> GPIO_0[0]  FlexPRET UART0 TX
+   USB-UART GND -> GPIO_0[2]  GND
+   ```
+
+   Do not connect a 5 V UART signal.
+
+4. From Windows PowerShell, find the USB-UART adapter:
+
+   ```powershell
+   usbipd list
+   ```
+
+5. If it is not already shared, bind it from an Administrator PowerShell:
+
+   ```powershell
+   usbipd bind --busid <BUSID>
+   ```
+
+6. Attach it to WSL:
+
+   ```powershell
+   usbipd attach --wsl --busid <BUSID>
+   ```
+
+7. In WSL, confirm the device and grant temporary access if required:
+
+   ```bash
+   ls -l /dev/ttyUSB*
+   sudo chmod 666 /dev/ttyUSB0
+   ```
+
+   The permanent alternative is to add the user to the `dialout` group and
+   sign out and back in. `chmod +x` is not a serial-port permission fix.
+
+8. Set `SW[0]` high and press `KEY[3]` to enter dynamic loading mode.
+9. Build the FPGA application as shown above, then load it:
+
+   ```bash
+   cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
+   ./bin/icc-model
+   ```
+
+The default bootloader UART is `/dev/ttyUSB0`. To use another device, set the
+environment variable before running CMake because the path is written into the
+generated launcher:
 
 ```bash
-cd /home/eugene/gastric-pacemaker/fp-ges/apps/icc-model
-FP_SDK_FPGA_FLASH_DEVICE=/dev/ttyUSB0 ./bin/icc-model
+export FP_SDK_FPGA_FLASH_DEVICE=/dev/ttyUSB1
+cmake -S . -B build
+cmake --build build
+./bin/icc-model
 ```
 
 Only one program should own `/dev/ttyUSB0`. Close `picocom`, `minicom`, or any

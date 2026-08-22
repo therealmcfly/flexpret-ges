@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "global.h"
 
-int recv_from_gut();
+int recv_from_gut(void);
 
 void send_to_gut(PmState value);
 

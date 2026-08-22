@@ -98,8 +98,11 @@ The GES sensing electrode must be configured for FlexPRET to receive EGM samples
 2. The selected sensing electrode calculates an EGM sample.
 3. The Mega sends the scaled signed EGM sample from TX1 to FlexPRET UART1 RX.
 4. FlexPRET processes the EGM and advances its GES state machine.
-5. When the GES enters the pacing state, it sends byte `1` from UART1 TX.
-6. The Mega receives the pacing byte on RX1 and stimulates the configured pacing-lead cell.
+5. While the GES remains in the pacing state, it sends `AA 55 01` from UART1 TX.
+6. The receiving implementation must accept only a complete frame with a
+   payload value of `1` before stimulating the configured pacing-lead cell.
+   The legacy Mega receiver must be updated from its raw-byte-`1` protocol
+   before this workflow is used with the framed GES build.
 7. The paced activation propagates through the ICC network and contributes to later EGM samples.
 
 ## Troubleshooting

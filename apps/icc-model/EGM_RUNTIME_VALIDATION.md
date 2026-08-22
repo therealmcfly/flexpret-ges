@@ -1,6 +1,6 @@
 # Relative-Potential EGM Runtime Validation
 
-Validation date: 2026-08-16
+Validation date: 2026-08-18
 
 ## Host runtime matrix
 
@@ -157,11 +157,11 @@ object, table symbol, section sizes, symbols, and disassembly.
 
 | Timestep | ISPM used | DSPM static | Stack reserved | Total used/reserved | Remaining of 128 KiB |
 |---:|---:|---:|---:|---:|---:|
-| 200 ms | 15,896 | 6,272 | 2,048 | 24,216 | 106,856 |
-| 100 ms | 15,904 | 6,272 | 2,048 | 24,224 | 106,848 |
-| 50 ms | 15,888 | 6,272 | 2,048 | 24,208 | 106,864 |
-| 20 ms | 15,868 | 6,272 | 2,048 | 24,188 | 106,884 |
-| 10 ms | 15,856 | 6,272 | 2,048 | 24,176 | 106,896 |
+| 200 ms | 16,028 | 6,272 | 2,048 | 24,348 | 106,724 |
+| 100 ms | 16,036 | 6,272 | 2,048 | 24,356 | 106,716 |
+| 50 ms | 16,020 | 6,272 | 2,048 | 24,340 | 106,732 |
+| 20 ms | 16,000 | 6,272 | 2,048 | 24,320 | 106,752 |
+| 10 ms | 15,988 | 6,272 | 2,048 | 24,308 | 106,764 |
 
 The configured regions are 64 KiB ISPM and 64 KiB DSPM. The 2 KiB stack is
 reserved at the end of DSPM. The linker puts read-only data in `.data` with an
