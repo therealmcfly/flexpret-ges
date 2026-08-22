@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include <flexpret/csrs.h>
+#include <flexpret/io.h>
 #include <flexpret/time.h>
 #include <flexpret/uart.h>
 #include <flexpret/wb.h>
@@ -79,7 +80,39 @@ static bool initialize_app(IccModelApp *app)
         ICC_EGM_INITIAL_ELECTRODE_X_UM);
 }
 
-static void send_egm_uart(IccEgmValue egm_value)
+static void print_configuration(const IccModelApp *app)
+{
+    fp_print_string(
+        "--------------- ICC Model on FlexPRET Start ---------------\n");
+    printf("Timestep:             %u ms\n", (unsigned)ICC_TIMESTEP_MS);
+    printf("Cell intervals:       [%d, %d, %d, %d, %d] s\n",
+        (int)ICC_CELL1_INTERVAL_S,
+        (int)ICC_CELL2_INTERVAL_S,
+        (int)ICC_CELL3_INTERVAL_S,
+        (int)ICC_CELL4_INTERVAL_S,
+        (int)ICC_CELL5_INTERVAL_S);
+    printf("Path delays:          [%u, %u, %u, %u] ms\n",
+        (unsigned)ICC_PATH1_DELAY_MS,
+        (unsigned)ICC_PATH2_DELAY_MS,
+        (unsigned)ICC_PATH3_DELAY_MS,
+        (unsigned)ICC_PATH4_DELAY_MS);
+    printf("Path gaps:            [%u, %u, %u, %u] mm\n",
+        (unsigned)ICC_PATH1_GAP_MM,
+        (unsigned)ICC_PATH2_GAP_MM,
+        (unsigned)ICC_PATH3_GAP_MM,
+        (unsigned)ICC_PATH4_GAP_MM);
+    printf("Electrode position:   %d um\n",
+        (int)ICC_EGM_INITIAL_ELECTRODE_X_UM);
+    printf("Electrode cell:       Cell %u\n",
+        (unsigned)app->pacing_lead_cell_index + 1U);
+    printf("Pacing-lead cell:     Cell %u\n",
+        (unsigned)app->pacing_lead_cell_index + 1U);
+    printf("EGM/pacing UART:      UART%u\n", (unsigned)ICC_MODEL_UART);
+    fp_print_string("EGM frame:            AA 55 + little-endian int16\n");
+    fp_print_string("ICC Model Start!\n");
+}
+
+static int16_t send_egm_uart(IccEgmValue egm_value)
 {
     int32_t scaled_value = egm_value >> 12;
     uint16_t raw_value;
@@ -96,18 +129,42 @@ static void send_egm_uart(IccEgmValue egm_value)
     uart_send(ICC_MODEL_UART_BASE,
         (uint8_t)(raw_value & UINT16_C(0xFF)));
     uart_send(ICC_MODEL_UART_BASE, (uint8_t)(raw_value >> 8));
+    return (int16_t)scaled_value;
 }
 
-static bool check_pacing_uart(IccModelApp *app)
+static bool check_pacing_uart(
+    IccModelApp *app,
+    uint32_t step,
+    uint8_t *pacing_value)
 {
     uint32_t status = wb_read(ICC_MODEL_UART_BASE + UART_CSR_OFF);
+    uint8_t cell_index;
+    const Icc *cell;
+
+    if (pacing_value == NULL) {
+        return false;
+    }
+    *pacing_value = 0U;
 
     if (!UART_DATA_READY(status)) {
         return true;
     }
-    if (uart_receive(ICC_MODEL_UART_BASE) != UINT8_C(1)) {
+    *pacing_value = uart_receive(ICC_MODEL_UART_BASE);
+    if (*pacing_value == 0U) {
         return true;
     }
+
+    cell_index = app->pacing_lead_cell_index;
+    if (cell_index >= ICC_NETWORK_1D_CELL_COUNT) {
+        return false;
+    }
+    cell = &app->network.cells[cell_index];
+    printf("PACE_RX: step=%u value=%u cell=%u state=%s relay=%d\n",
+        (unsigned)step,
+        (unsigned)*pacing_value,
+        (unsigned)cell_index + 1U,
+        icc_state_name(cell->state),
+        (int)cell->relay);
     return icc_model_app_apply_pacing(app);
 }
 
@@ -115,13 +172,18 @@ int main(void)
 {
     IccModelApp app;
     IccEgmValue egm_value;
+    const Icc *paced_cell;
+    int16_t transmitted_egm;
     uint32_t clock_probe_start;
     uint32_t clock_probe_end;
     uint32_t next_release;
+    uint32_t step = 0U;
+    uint8_t pacing_value;
 
     if (!initialize_app(&app)) {
         return 1;
     }
+    print_configuration(&app);
 
     clock_probe_start = rdtime();
     fp_nop;
@@ -145,12 +207,22 @@ int main(void)
         fp_nop;
         fp_nop;
         next_release += ICC_PERIOD_NS;
-        if (!check_pacing_uart(&app)) {
+        if (!check_pacing_uart(&app, step, &pacing_value)) {
             return 1;
         }
         if (!icc_model_app_step(&app, &egm_value)) {
             return 1;
         }
-        send_egm_uart(egm_value);
+        transmitted_egm = send_egm_uart(egm_value);
+        if (pacing_value != 0U) {
+            paced_cell = &app.network.cells[app.pacing_lead_cell_index];
+            printf("PACE_RESULT: step=%u value=%u cell=%u state=%s egm=%d\n",
+                (unsigned)step,
+                (unsigned)pacing_value,
+                (unsigned)app.pacing_lead_cell_index + 1U,
+                icc_state_name(paced_cell->state),
+                (int)transmitted_egm);
+        }
+        step++;
     }
 }

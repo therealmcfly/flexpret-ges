@@ -281,6 +281,24 @@ The FPGA application configuration defaults are:
 - EGM electrode and pacing lead: `6000` micrometres (Cell 2);
 - timestep: `200` ms.
 
+After initialization, ICC-model prints the effective configuration once on
+UART0. The binary EGM/pacing UART remains free of diagnostic text. With the
+defaults, the console begins with:
+
+```text
+--------------- ICC Model on FlexPRET Start ---------------
+Timestep:             200 ms
+Cell intervals:       [20, 0, 0, 0, 0] s
+Path delays:          [1000, 1000, 1000, 1000] ms
+Path gaps:            [6, 6, 6, 6] mm
+Electrode position:   6000 um
+Electrode cell:       Cell 2
+Pacing-lead cell:     Cell 2
+EGM/pacing UART:      UART2
+EGM frame:            AA 55 + little-endian int16
+ICC Model Start!
+```
+
 Cell intervals, path geometry, and UART can be set when configuring:
 
 ```bash
