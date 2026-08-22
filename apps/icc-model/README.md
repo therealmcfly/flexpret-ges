@@ -296,8 +296,13 @@ Electrode cell:       Cell 2
 Pacing-lead cell:     Cell 2
 EGM/pacing UART:      UART2
 EGM frame:            AA 55 + little-endian int16
+Pacing frame:         AA 55 01
 ICC Model Start!
 ```
+
+ICC-model ignores unframed UART bytes. A pacing request is accepted only after
+the complete `AA 55 01` frame is received. GES sends the fixed value `1` for
+each pacing attempt.
 
 Cell intervals, path geometry, and UART can be set when configuring:
 

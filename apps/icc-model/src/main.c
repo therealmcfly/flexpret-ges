@@ -50,6 +50,17 @@
 #error "ICC_MODEL_UART must be 1 or 2"
 #endif
 
+#define ICC_PACING_SYNC0 UINT8_C(0xAA)
+#define ICC_PACING_SYNC1 UINT8_C(0x55)
+
+typedef enum {
+    ICC_PACING_WAIT_SYNC0 = 0,
+    ICC_PACING_WAIT_SYNC1,
+    ICC_PACING_WAIT_VALUE
+} IccPacingRxState;
+
+static IccPacingRxState pacing_rx_state = ICC_PACING_WAIT_SYNC0;
+
 static bool initialize_app(IccModelApp *app)
 {
     static const int8_t intervals[ICC_NETWORK_1D_CELL_COUNT] = {
@@ -109,6 +120,7 @@ static void print_configuration(const IccModelApp *app)
         (unsigned)app->pacing_lead_cell_index + 1U);
     printf("EGM/pacing UART:      UART%u\n", (unsigned)ICC_MODEL_UART);
     fp_print_string("EGM frame:            AA 55 + little-endian int16\n");
+    fp_print_string("Pacing frame:         AA 55 01\n");
     fp_print_string("ICC Model Start!\n");
 }
 
@@ -137,7 +149,8 @@ static bool check_pacing_uart(
     uint32_t step,
     uint8_t *pacing_value)
 {
-    uint32_t status = wb_read(ICC_MODEL_UART_BASE + UART_CSR_OFF);
+    uint32_t status;
+    uint8_t byte;
     uint8_t cell_index;
     const Icc *cell;
 
@@ -146,12 +159,39 @@ static bool check_pacing_uart(
     }
     *pacing_value = 0U;
 
-    if (!UART_DATA_READY(status)) {
-        return true;
-    }
-    *pacing_value = uart_receive(ICC_MODEL_UART_BASE);
-    if (*pacing_value == 0U) {
-        return true;
+    while (*pacing_value == 0U) {
+        status = wb_read(ICC_MODEL_UART_BASE + UART_CSR_OFF);
+        if (!UART_DATA_READY(status)) {
+            return true;
+        }
+
+        byte = uart_receive(ICC_MODEL_UART_BASE);
+        switch (pacing_rx_state) {
+        case ICC_PACING_WAIT_SYNC0:
+            if (byte == ICC_PACING_SYNC0) {
+                pacing_rx_state = ICC_PACING_WAIT_SYNC1;
+            }
+            break;
+
+        case ICC_PACING_WAIT_SYNC1:
+            if (byte == ICC_PACING_SYNC1) {
+                pacing_rx_state = ICC_PACING_WAIT_VALUE;
+            } else if (byte != ICC_PACING_SYNC0) {
+                pacing_rx_state = ICC_PACING_WAIT_SYNC0;
+            }
+            break;
+
+        case ICC_PACING_WAIT_VALUE:
+            pacing_rx_state = ICC_PACING_WAIT_SYNC0;
+            if (byte == 1U) {
+                *pacing_value = byte;
+            }
+            break;
+
+        default:
+            pacing_rx_state = ICC_PACING_WAIT_SYNC0;
+            break;
+        }
     }
 
     cell_index = app->pacing_lead_cell_index;

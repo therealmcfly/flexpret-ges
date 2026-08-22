@@ -8,8 +8,6 @@
 #define SYNC0 0xAA
 #define SYNC1 0x55
 
-static uint8_t pacing_value = 0U;
-
 int recv_from_gut(void)
 {
 	uint8_t byte;
@@ -63,11 +61,9 @@ void send_to_gut(PmState state)
 		int instructions = end_instret - start_instret;
 		int cycles = end_cycle - start_cycle;
 		send_et_metrics((int)et_state, en - st, cycles, instructions);
-		pacing_value++;
-		if (pacing_value == 0U) {
-			pacing_value = 1U;
-		}
-		uart_send(UART1_BASE, pacing_value);
+		uart_send(UART1_BASE, SYNC0);
+		uart_send(UART1_BASE, SYNC1);
+		uart_send(UART1_BASE, 1U);
 		return;
 	}
 	/* END MEASUREMENT */
