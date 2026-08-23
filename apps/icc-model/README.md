@@ -295,16 +295,35 @@ Electrode position:   6000 um
 Electrode cell:       Cell 2
 Pacing-lead cell:     Cell 2
 EGM/pacing UART:      UART2
+RiSPA voltage UART:   UART1
 EGM frame:            AA 55 + little-endian int16
 Pacing frame:         AA 55 01
+RiSPA frame:          AA 55 + 5 little-endian int32
 ICC Model Start!
 ```
+
+## RiSPA voltage output
+
+The FPGA application sends all five updated ICC cell voltages on UART1 after
+every model step. Cell array order is fixed: Cell 1 maps to Bellow 1 through
+Cell 5 mapping to Bellow 5. Voltages remain signed `int32` nanovolt values;
+they are not scaled to the `int16` EGM format.
+
+Each fixed 22-byte frame is:
+
+```text
+AA 55 | cell_1_i32_le | cell_2_i32_le | cell_3_i32_le |
+        cell_4_i32_le | cell_5_i32_le
+```
+
+UART1 is reserved for RiSPA voltage output, while UART2 carries EGM and pacing
+frames.
 
 ICC-model ignores unframed UART bytes. A pacing request is accepted only after
 the complete `AA 55 01` frame is received. GES sends the fixed value `1` for
 each pacing attempt.
 
-Cell intervals, path geometry, and UART can be set when configuring:
+Cell intervals, timestep, and electrode position can be set when configuring:
 
 ```bash
 cmake -S . -B build-fpga-50ms \
@@ -330,8 +349,9 @@ cmake --build build-fpga-50ms
 
 Supported cell intervals are `-1, 0, 15, 20, 23, 26, 30, 40` seconds.
 Use `0` for no intrinsic activation while retaining pacing response. A cell
-configured as `-1` ignores pacing as well as intrinsic activation. UART1 and
-UART2 are supported; UART0 remains reserved for the bootloader and console.
+configured as `-1` ignores pacing as well as intrinsic activation. UART0 is
+reserved for the bootloader and console, UART1 sends RiSPA voltages, and UART2
+handles EGM transmission and pacing reception.
 
 The current EGM LUT specialization requires every delay to remain `1000` ms
 and every gap to remain `6` mm. CMake rejects other path values rather than

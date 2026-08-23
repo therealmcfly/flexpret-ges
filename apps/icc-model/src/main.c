@@ -7,6 +7,7 @@
 #include <flexpret/wb.h>
 
 #include "app.h"
+#include "rispa_frame.h"
 
 #ifndef ICC_PERIOD_NS
 #define ICC_PERIOD_NS (ICC_TIMESTEP_MS * 1000000U)
@@ -119,8 +120,10 @@ static void print_configuration(const IccModelApp *app)
     printf("Pacing-lead cell:     Cell %u\n",
         (unsigned)app->pacing_lead_cell_index + 1U);
     printf("EGM/pacing UART:      UART%u\n", (unsigned)ICC_MODEL_UART);
+    fp_print_string("RiSPA voltage UART:   UART1\n");
     fp_print_string("EGM frame:            AA 55 + little-endian int16\n");
     fp_print_string("Pacing frame:         AA 55 01\n");
+    fp_print_string("RiSPA frame:          AA 55 + 5 little-endian int32\n");
     fp_print_string("ICC Model Start!\n");
 }
 
@@ -142,6 +145,26 @@ static int16_t send_egm_uart(IccEgmValue egm_value)
         (uint8_t)(raw_value & UINT16_C(0xFF)));
     uart_send(ICC_MODEL_UART_BASE, (uint8_t)(raw_value >> 8));
     return (int16_t)scaled_value;
+}
+
+static bool send_rispa_voltages(const IccModelApp *app)
+{
+    int32_t voltage_nv[ICC_NETWORK_1D_CELL_COUNT];
+    uint8_t frame[ICC_RISPA_FRAME_SIZE];
+
+    if (app == NULL) {
+        return false;
+    }
+    for (uint8_t cell = 0U; cell < ICC_NETWORK_1D_CELL_COUNT; ++cell) {
+        voltage_nv[cell] = app->network.cells[cell].voltage_nv;
+    }
+    if (!icc_rispa_encode_voltage_frame(voltage_nv, frame)) {
+        return false;
+    }
+    for (uint8_t index = 0U; index < ICC_RISPA_FRAME_SIZE; ++index) {
+        uart_send(UART1_BASE, frame[index]);
+    }
+    return true;
 }
 
 static bool check_pacing_uart(
@@ -251,6 +274,9 @@ int main(void)
             return 1;
         }
         if (!icc_model_app_step(&app, &egm_value)) {
+            return 1;
+        }
+        if (!send_rispa_voltages(&app)) {
             return 1;
         }
         transmitted_egm = send_egm_uart(egm_value);

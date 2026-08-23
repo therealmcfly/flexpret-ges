@@ -7,6 +7,13 @@ APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 
+gcc -std=c11 -Wall -Wextra -Werror \
+    -I"${APP_DIR}/inc" \
+    "${APP_DIR}/src/rispa_frame.c" \
+    "${APP_DIR}/tests/test_rispa_frame.c" \
+    -o "${TEMP_DIR}/test-rispa-frame"
+"${TEMP_DIR}/test-rispa-frame"
+
 for timestep_ms in 200 100 50 20 10
 do
     gcc -std=c11 -Wall -Wextra -Werror \
