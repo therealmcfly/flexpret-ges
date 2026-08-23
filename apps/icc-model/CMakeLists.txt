@@ -71,10 +71,11 @@ foreach(path_number RANGE 1 4)
 endforeach()
 
 set(ICC_MODEL_UART "2" CACHE STRING
-  "UART used for EGM transmission and pacing reception (1 or 2)")
-set_property(CACHE ICC_MODEL_UART PROPERTY STRINGS 1 2)
-if (NOT ICC_MODEL_UART STREQUAL "1" AND NOT ICC_MODEL_UART STREQUAL "2")
-  message(FATAL_ERROR "ICC_MODEL_UART must be 1 or 2; UART0 is reserved")
+  "UART used for EGM transmission and pacing reception (fixed at 2)")
+set_property(CACHE ICC_MODEL_UART PROPERTY STRINGS 2)
+if (NOT ICC_MODEL_UART STREQUAL "2")
+  message(FATAL_ERROR
+    "ICC_MODEL_UART must be 2 because UART1 is reserved for RiSPA voltages")
 endif()
 
 set(ICC_EGM_ELECTRODE_X_UM "6000" CACHE STRING
@@ -106,6 +107,7 @@ set(ICC_MODEL_COMMON_SOURCES
   src/icc.c
   src/network.c
   src/path.c
+  src/rispa_frame.c
 )
 
 # Keep production, interactive-emulator, and finite validation entry points
