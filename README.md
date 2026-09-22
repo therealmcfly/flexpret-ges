@@ -42,6 +42,35 @@ After cloning the repository, update submodules with:
 git submodule update --init --recursive
 ```
 
+## Application repositories
+
+The ICC model and GES applications are maintained as separate repositories and
+are pinned here as Git submodules:
+
+| Path | Repository |
+| --- | --- |
+| `apps/icc-model` | `git@github.com:therealmcfly/hrt-icc-model.git` |
+| `apps/ges` | `git@github.com:therealmcfly/hrt-ges.git` |
+
+The pinned commits keep each FlexPRET checkout reproducible. To develop an
+application, create and commit changes inside its submodule first. After those
+changes are pushed to the application repository, update the pinned commit in
+this repository:
+
+```
+cd apps/icc-model                 # or apps/ges
+git switch main
+git pull
+# create a branch, make changes, test, commit, and push
+cd ../..
+git add apps/icc-model            # or apps/ges
+git commit -m "chore: update ICC-model application"
+```
+
+Use `git submodule update --init --recursive` to restore the versions pinned by
+this repository. Do not use `git submodule update --remote` unless you
+intentionally want to advance a submodule to a newer upstream commit.
+
 ## FlexPRET unit tests
 To run all unit tests for FlexPRET:
 
