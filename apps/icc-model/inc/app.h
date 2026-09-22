@@ -4,12 +4,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "egm.h"
+#include "egm_bank.h"
 #include "network.h"
 
 typedef struct {
     IccNetwork1d network;
-    IccEgm egm;
+    IccEgmBank egm_bank;
+    uint8_t selected_egm_channel_index;
     uint8_t pacing_lead_cell_index;
     bool initialized;
 } IccModelApp;
@@ -22,6 +23,9 @@ bool icc_model_app_init(
     int32_t electrode_x_um);
 
 bool icc_model_app_step(IccModelApp *app, IccEgmValue *egm_value);
+bool icc_model_app_step_all(
+    IccModelApp *app,
+    IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT]);
 bool icc_model_app_apply_pacing(IccModelApp *app);
 
 #endif

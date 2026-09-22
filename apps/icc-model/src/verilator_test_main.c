@@ -8,6 +8,7 @@
 #include <flexpret/time.h>
 
 #include "egm.h"
+#include "egm_bank.h"
 #include "icc.h"
 #include "network.h"
 #include "path.h"
@@ -18,6 +19,10 @@
 
 #ifndef ICC_EGM_INITIAL_ELECTRODE_X_UM
 #define ICC_EGM_INITIAL_ELECTRODE_X_UM ICC_EGM_DEFAULT_ELECTRODE_X_UM
+#endif
+
+#ifndef ICC_EGM_OUTPUT_ALL_CHANNELS
+#define ICC_EGM_OUTPUT_ALL_CHANNELS 0
 #endif
 
 #ifdef ICC_VERILATOR_TEST_SCENARIO
@@ -147,6 +152,11 @@ static void print_test_header(const IccNetwork1d *network)
            (unsigned)ICC_VERILATOR_TEST_PATH_DELAY_MS,
            (unsigned)ICC_VERILATOR_TEST_SAMPLES,
            (int)ICC_EGM_INITIAL_ELECTRODE_X_UM);
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    printf("EGM_MODE,all,channels,%u\n", (unsigned)ICC_EGM_CHANNEL_COUNT);
+#else
+    printf("EGM_MODE,single,channels,1\n");
+#endif
     for (index = 0U; index < ICC_NETWORK_1D_CELL_COUNT; ++index) {
         printf("CONFIG,%u,%d\n",
                (unsigned)index,
@@ -188,12 +198,23 @@ static void print_test_events(
 static void print_csv_header(void)
 {
     printf("ICC integer-nanovolt five-cell 1D network\n");
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    printf("sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,"
+           "execution_time_ns,egm_output_electrode_x_um,"
+           "cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,"
+           "cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,"
+           "cell_4_state,cell_4_nv,"
+           "egm_cell_1_scaled,egm_cell_2_scaled,egm_cell_3_scaled,"
+           "egm_cell_4_scaled,egm_cell_5_scaled,"
+           "path_0_state,path_1_state,path_2_state,path_3_state\n");
+#else
     printf("sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,"
            "execution_time_ns,egm_electrode_x_um,"
            "cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,"
            "cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,"
            "cell_4_state,cell_4_nv,egm_scaled,path_0_state,path_1_state,"
            "path_2_state,path_3_state\n");
+#endif
 }
 
 static void print_csv_row(
@@ -204,8 +225,47 @@ static void print_csv_row(
     uint32_t execution_time,
     int32_t electrode_x_um,
     const IccNetwork1d *network,
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    const IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT])
+#else
     IccEgmValue egm_value)
+#endif
 {
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    printf("%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32
+           ",%" PRIu32 ",%" PRId32
+           ",%s,%" PRId32 ",%s,%" PRId32
+           ",%s,%" PRId32 ",%s,%" PRId32
+           ",%s,%" PRId32
+           ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRId32 ",%" PRId32
+           ",%s,%s,%s,%s\n",
+           sample,
+           sample * ICC_TIMESTEP_MS,
+           iteration_start,
+           measured_period,
+           release_lateness,
+           execution_time,
+           electrode_x_um,
+           icc_state_name(network->cells[0].state),
+           network->cells[0].voltage_nv,
+           icc_state_name(network->cells[1].state),
+           network->cells[1].voltage_nv,
+           icc_state_name(network->cells[2].state),
+           network->cells[2].voltage_nv,
+           icc_state_name(network->cells[3].state),
+           network->cells[3].voltage_nv,
+           icc_state_name(network->cells[4].state),
+           network->cells[4].voltage_nv,
+           egm_values[0],
+           egm_values[1],
+           egm_values[2],
+           egm_values[3],
+           egm_values[4],
+           icc_path_state_name(network->paths[0].state),
+           icc_path_state_name(network->paths[1].state),
+           icc_path_state_name(network->paths[2].state),
+           icc_path_state_name(network->paths[3].state));
+#else
     printf("%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32
            ",%" PRIu32 ",%" PRId32
            ",%s,%" PRId32 ",%s,%" PRId32
@@ -233,6 +293,7 @@ static void print_csv_row(
            icc_path_state_name(network->paths[1].state),
            icc_path_state_name(network->paths[2].state),
            icc_path_state_name(network->paths[3].state));
+#endif
 }
 #endif
 #endif
@@ -241,6 +302,10 @@ int main(void)
 {
     IccNetwork1d network;
     IccEgm egm;
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    IccEgmBank egm_bank;
+    uint8_t selected_egm_channel_index;
+#endif
     uint32_t sample = 0U;
     uint32_t clock_probe_start;
     uint32_t clock_probe_end;
@@ -268,6 +333,17 @@ int main(void)
     if (!icc_egm_init(&egm, ICC_EGM_INITIAL_ELECTRODE_X_UM)) {
         return 1;
     }
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    if (!icc_egm_bank_init(&egm_bank)) {
+        return 1;
+    }
+    if (!icc_egm_bank_channel_for_x_um(
+            &egm_bank,
+            ICC_EGM_INITIAL_ELECTRODE_X_UM,
+            &selected_egm_channel_index)) {
+        return 1;
+    }
+#endif
     egm_configuration_matches = icc_egm_configuration_matches(&network);
 #ifndef ICC_VERILATOR_TEST_SCENARIO
     if (!egm_configuration_matches) {
@@ -321,6 +397,9 @@ int main(void)
         uint32_t execution_time;
 #endif
         IccEgmValue egm_value = 0;
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+        IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT] = {0, 0, 0, 0, 0};
+#endif
 #if defined(__EMULATOR__) && defined(ICC_VERILATOR_TEST_SCENARIO)
         bool relay_before_step[ICC_NETWORK_1D_CELL_COUNT];
 #endif
@@ -358,9 +437,16 @@ int main(void)
 #endif
         icc_network_1d_step(&network);
         if (egm_configuration_matches) {
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+            if (!icc_egm_bank_compute(&egm_bank, &network, egm_values)) {
+                return 1;
+            }
+            egm_value = egm_values[selected_egm_channel_index];
+#else
             if (!icc_egm_compute(&egm, &network, &egm_value)) {
                 return 1;
             }
+#endif
         }
 #ifdef __EMULATOR__
         iteration_end = rdtime();
@@ -384,11 +470,24 @@ int main(void)
             previous_path_states,
             relay_before_step);
 #ifdef ICC_VERILATOR_EGM_TRACE
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+        (void)egm_value;
+        printf("EGM_ALL,%u,%u,%" PRId32 ",%" PRId32 ",%" PRId32
+               ",%" PRId32 ",%" PRId32 "\n",
+               (unsigned)sample,
+               (unsigned)(sample * ICC_TIMESTEP_MS),
+               egm_values[0],
+               egm_values[1],
+               egm_values[2],
+               egm_values[3],
+               egm_values[4]);
+#else
         printf("EGM,%u,%u,%d,%" PRId32 "\n",
                (unsigned)sample,
                (unsigned)(sample * ICC_TIMESTEP_MS),
                (int)icc_egm_electrode_x_um(&egm),
                egm_value);
+#endif
 #else
         (void)egm_value;
 #endif
@@ -418,7 +517,11 @@ int main(void)
             execution_time,
             icc_egm_electrode_x_um(&egm),
             &network,
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+            egm_values);
+#else
             egm_value);
+#endif
 #endif
 #else
         (void)measured_period;
