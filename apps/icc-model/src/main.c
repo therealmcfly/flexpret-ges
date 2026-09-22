@@ -17,6 +17,10 @@
 #define ICC_EGM_INITIAL_ELECTRODE_X_UM ICC_EGM_DEFAULT_ELECTRODE_X_UM
 #endif
 
+#ifndef ICC_EGM_OUTPUT_ALL_CHANNELS
+#define ICC_EGM_OUTPUT_ALL_CHANNELS 0
+#endif
+
 #ifndef ICC_CELL1_INTERVAL_S
 #define ICC_CELL1_INTERVAL_S 20
 #define ICC_CELL2_INTERVAL_S 0
@@ -120,6 +124,11 @@ static void print_configuration(const IccModelApp *app)
     printf("Pacing-lead cell:     Cell %u\n",
         (unsigned)app->pacing_lead_cell_index + 1U);
     printf("EGM/pacing UART:      UART%u\n", (unsigned)ICC_MODEL_UART);
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    fp_print_string("EGM computation:      all five electrode channels\n");
+#else
+    fp_print_string("EGM computation:      selected electrode only\n");
+#endif
     fp_print_string("RiSPA voltage UART:   UART1\n");
     fp_print_string("EGM frame:            AA 55 + little-endian int16\n");
     fp_print_string("Pacing frame:         AA 55 01\n");
@@ -235,6 +244,9 @@ int main(void)
 {
     IccModelApp app;
     IccEgmValue egm_value;
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+    IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT];
+#endif
     const Icc *paced_cell;
     int16_t transmitted_egm;
     uint32_t clock_probe_start;
@@ -273,9 +285,16 @@ int main(void)
         if (!check_pacing_uart(&app, step, &pacing_value)) {
             return 1;
         }
+#if ICC_EGM_OUTPUT_ALL_CHANNELS
+        if (!icc_model_app_step_all(&app, egm_values)) {
+            return 1;
+        }
+        egm_value = egm_values[app.selected_egm_channel_index];
+#else
         if (!icc_model_app_step(&app, &egm_value)) {
             return 1;
         }
+#endif
         if (!send_rispa_voltages(&app)) {
             return 1;
         }

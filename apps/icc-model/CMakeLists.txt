@@ -86,6 +86,17 @@ if (NOT ICC_EGM_ELECTRODE_X_UM IN_LIST ICC_EGM_SUPPORTED_ELECTRODE_X_UM)
     "ICC_EGM_ELECTRODE_X_UM must be one of: 0, 6000, 12000, 18000, 24000")
 endif()
 
+set(ICC_EGM_OUTPUT_MODE "single" CACHE STRING
+  "EGM computation mode (single selected electrode or all five electrodes)")
+set_property(CACHE ICC_EGM_OUTPUT_MODE PROPERTY STRINGS single all)
+if (ICC_EGM_OUTPUT_MODE STREQUAL "single")
+  set(ICC_EGM_OUTPUT_ALL_CHANNELS 0)
+elseif (ICC_EGM_OUTPUT_MODE STREQUAL "all")
+  set(ICC_EGM_OUTPUT_ALL_CHANNELS 1)
+else()
+  message(FATAL_ERROR "ICC_EGM_OUTPUT_MODE must be 'single' or 'all'")
+endif()
+
 if (NOT "${TARGET}" STREQUAL "fpga" AND NOT "${TARGET}" STREQUAL "emulator")
   message(FATAL_ERROR "TARGET must be either 'fpga' or 'emulator'")
 endif()
@@ -104,6 +115,7 @@ endif()
 set(ICC_MODEL_COMMON_SOURCES
   src/app.c
   src/egm.c
+  src/egm_bank.c
   src/icc.c
   src/network.c
   src/path.c
@@ -128,6 +140,7 @@ add_executable(icc-model
 target_compile_definitions(icc-model PRIVATE
   ICC_TIMESTEP_MS=${ICC_MODEL_TIMESTEP_MS}U
   ICC_EGM_INITIAL_ELECTRODE_X_UM=${ICC_EGM_ELECTRODE_X_UM}
+  ICC_EGM_OUTPUT_ALL_CHANNELS=${ICC_EGM_OUTPUT_ALL_CHANNELS}
   ICC_CELL1_INTERVAL_S=${ICC_CELL1_INTERVAL_S}
   ICC_CELL2_INTERVAL_S=${ICC_CELL2_INTERVAL_S}
   ICC_CELL3_INTERVAL_S=${ICC_CELL3_INTERVAL_S}

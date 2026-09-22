@@ -24,6 +24,7 @@ static void test_valid_application(void)
     assert(icc_model_app_init(
         &app, kIntervals, kDelays, kGaps, 6000));
     assert(app.initialized);
+    assert(app.selected_egm_channel_index == 1U);
     assert(app.pacing_lead_cell_index == 1U);
     assert(icc_model_app_step(&app, &egm_value));
 }
@@ -98,6 +99,37 @@ static void test_pacing_after_ten_seconds(void)
     }
 }
 
+
+static void test_single_and_all_step_equivalence(void)
+{
+    IccModelApp single_app;
+    IccModelApp all_app;
+    IccEgmValue selected_value;
+    IccEgmValue all_values[ICC_EGM_CHANNEL_COUNT];
+
+    for (uint8_t selected = 0U;
+         selected < ICC_EGM_CHANNEL_COUNT;
+         ++selected) {
+        const int32_t electrode_x_um = (int32_t)selected * 6000;
+        assert(icc_model_app_init(
+            &single_app,
+            kIntervals,
+            kDelays,
+            kGaps,
+            electrode_x_um));
+        assert(icc_model_app_init(
+            &all_app,
+            kIntervals,
+            kDelays,
+            kGaps,
+            electrode_x_um));
+
+        assert(icc_model_app_step(&single_app, &selected_value));
+        assert(icc_model_app_step_all(&all_app, all_values));
+        assert(selected_value == all_values[selected]);
+    }
+}
+
 static void test_invalid_configuration(void)
 {
     IccModelApp app;
@@ -117,10 +149,14 @@ static void test_invalid_step(void)
 {
     IccModelApp app = {0};
     IccEgmValue egm_value;
+    IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT];
 
     assert(!icc_model_app_step(NULL, &egm_value));
     assert(!icc_model_app_step(&app, NULL));
     assert(!icc_model_app_step(&app, &egm_value));
+    assert(!icc_model_app_step_all(NULL, egm_values));
+    assert(!icc_model_app_step_all(&app, NULL));
+    assert(!icc_model_app_step_all(&app, egm_values));
     assert(!icc_model_app_apply_pacing(NULL));
     assert(!icc_model_app_apply_pacing(&app));
 }
@@ -130,6 +166,7 @@ int main(void)
     test_valid_application();
     test_invalid_configuration();
     test_invalid_step();
+    test_single_and_all_step_equivalence();
     test_pacing_lead_tracks_electrode();
     test_pacing_after_ten_seconds();
     printf("ICC application integration tests passed\n");

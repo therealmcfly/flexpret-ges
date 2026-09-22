@@ -2,27 +2,6 @@
 
 #include <stddef.h>
 
-static bool find_cell_at_position(
-    int32_t electrode_x_um,
-    uint8_t *cell_index)
-{
-    static const int32_t cell_positions_um[ICC_NETWORK_1D_CELL_COUNT] = {
-        0, 6000, 12000, 18000, 24000
-    };
-
-    if (cell_index == NULL) {
-        return false;
-    }
-
-    for (uint8_t cell = 0U; cell < ICC_NETWORK_1D_CELL_COUNT; ++cell) {
-        if (cell_positions_um[cell] == electrode_x_um) {
-            *cell_index = cell;
-            return true;
-        }
-    }
-    return false;
-}
-
 bool icc_model_app_init(
     IccModelApp *app,
     const int8_t cell_intervals_s[ICC_NETWORK_1D_CELL_COUNT],
@@ -42,29 +21,55 @@ bool icc_model_app_init(
             path_gaps_mm)) {
         return false;
     }
-    if (!icc_egm_init(&app->egm, electrode_x_um)) {
+    if (!icc_egm_bank_init(&app->egm_bank)) {
         return false;
     }
     if (!icc_egm_configuration_matches(&app->network)) {
         return false;
     }
-    if (!find_cell_at_position(
+    if (!icc_egm_bank_channel_for_x_um(
+            &app->egm_bank,
             electrode_x_um,
-            &app->pacing_lead_cell_index)) {
+            &app->selected_egm_channel_index)) {
         return false;
     }
+    app->pacing_lead_cell_index = app->selected_egm_channel_index;
     app->initialized = true;
     return true;
 }
 
 bool icc_model_app_step(IccModelApp *app, IccEgmValue *egm_value)
 {
+    const IccEgm *selected_channel;
+
     if (app == NULL || egm_value == NULL || !app->initialized) {
         return false;
     }
 
+    selected_channel = icc_egm_bank_channel(
+        &app->egm_bank,
+        app->selected_egm_channel_index);
+    if (selected_channel == NULL) {
+        return false;
+    }
+
     icc_network_1d_step(&app->network);
-    return icc_egm_compute(&app->egm, &app->network, egm_value);
+    return icc_egm_compute(selected_channel, &app->network, egm_value);
+}
+
+bool icc_model_app_step_all(
+    IccModelApp *app,
+    IccEgmValue egm_values[ICC_EGM_CHANNEL_COUNT])
+{
+    if (app == NULL || egm_values == NULL || !app->initialized) {
+        return false;
+    }
+
+    icc_network_1d_step(&app->network);
+    return icc_egm_bank_compute(
+        &app->egm_bank,
+        &app->network,
+        egm_values);
 }
 
 bool icc_model_app_apply_pacing(IccModelApp *app)

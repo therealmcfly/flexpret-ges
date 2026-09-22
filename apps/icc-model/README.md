@@ -39,6 +39,11 @@ The electrode may be moved at runtime among the five cell positions: `0`,
 `6000`, `12000`, `18000`, and `24000 um`. Moving it does not regenerate the
 table and does not rebuild the application.
 
+The default `single` output mode computes the selected electrode only. The
+optional `all` mode computes all five cell-centred electrodes from the same
+network state on every model step. Both modes reuse the same single 801-entry
+LUT; no electrode-specific generated tables exist.
+
 The build uses separate entry points for separate purposes. `src/main.c` is
 the minimal FPGA scheduler, `src/emulator_main.c` provides continuous CSV
 telemetry, and `src/verilator_test_main.c` contains finite validation scenarios.
@@ -128,6 +133,9 @@ The validation performed on 2026-08-16 passed:
 - repeated electrode changes in one process;
 - invalid electrodes, gaps, delays, topology, progression, and null inputs;
 - Q1/negative-EGM alignment for every cell and timestep.
+- simultaneous five-channel results against the public single-electrode API
+  for every path, direction, legal progression step, and supported timestep;
+- all-or-nothing five-channel publication when a computation fails.
 
 The measured maximum absolute table error was
 `4.999771405223008e-08` potential units at `21780 um`. The maximum meaningful
@@ -160,6 +168,25 @@ expected 1000 ms path spacing. At the accelerated 1,000,000 ns release period:
 These are cycle-accurate Verilator observations, not a formal WCET proof and
 not DE1-SoC board measurements. Results and representative traces are in
 `validation/egm_relative/`.
+
+Run the simultaneous five-channel equivalence matrix with:
+
+```bash
+./tools/run_egm_multi_verilator_tests.sh
+```
+
+The fresh 2026-08-23 matrix passed all 10 timestep/direction configurations.
+For each configuration, every channel was compared sample-for-sample with a
+separate single-mode run at the same coordinate, giving 50 complete channel
+comparisons. Every Q1 event occurred at the expected 1000 ms path spacing.
+At the accelerated 1,000,000 ns release period:
+
+- worst measured all-channel execution time: `63,140 ns`;
+- maximum release lateness: `160 ns`;
+- worst 10 ms biological deadline margin: `9,937,060 ns`.
+
+These are Verilator observations, not a formal WCET proof or physical-board
+timing measurements.
 
 ## All-cell waveform records
 
@@ -279,6 +306,7 @@ The FPGA application configuration defaults are:
 - all four path gaps: `6` mm;
 - EGM and pacing UART: UART2;
 - EGM electrode and pacing lead: `6000` micrometres (Cell 2);
+- EGM computation mode: `single`;
 - timestep: `200` ms.
 
 After initialization, ICC-model prints the effective configuration once on
@@ -295,6 +323,7 @@ Electrode position:   6000 um
 Electrode cell:       Cell 2
 Pacing-lead cell:     Cell 2
 EGM/pacing UART:      UART2
+EGM computation:      selected electrode only
 RiSPA voltage UART:   UART1
 EGM frame:            AA 55 + little-endian int16
 Pacing frame:         AA 55 01
@@ -331,6 +360,7 @@ cmake -S . -B build-fpga-50ms \
   -DICC_MODEL_TIMESTEP_MS=50 \
   -DICC_EGM_ELECTRODE_X_UM=0 \
   -DICC_CELL1_INTERVAL_S=20 \
+  -DICC_EGM_OUTPUT_MODE=all \
   -DICC_CELL2_INTERVAL_S=0 \
   -DICC_CELL3_INTERVAL_S=0 \
   -DICC_CELL4_INTERVAL_S=0 \
@@ -358,6 +388,14 @@ and every gap to remain `6` mm. CMake rejects other path values rather than
 building an application with inconsistent EGM geometry. Baud rate and the
 `AA 55` plus little-endian `int16` packet format are intentionally fixed.
 
+
+`ICC_EGM_OUTPUT_MODE` accepts `single` or `all` and defaults to `single`.
+In `all` mode, the model computes electrodes at all five cell centres after one
+network step. `ICC_EGM_ELECTRODE_X_UM` still selects the pacing-lead cell and
+the one backward-compatible EGM channel sent to GES on UART2. The other four
+channels are available through `IccEgmBank` and are emitted by the emulator and
+finite Verilator harness; adding them to controller telemetry is a separate
+protocol change.
 CMake stores these values in each build directory. Reconfiguring without a
 `-D` option retains that directory's previous value; `cmake --build` uses
 the cached configuration and does not restore defaults.
@@ -371,26 +409,31 @@ To cross-build and inspect all supported timesteps:
 ./tools/run_egm_fpga_checks.sh
 ```
 
-All five FPGA builds passed after the entry-point refactor on 2026-08-18. The
-largest build was the 100 ms
-configuration:
+The fresh 2026-08-23 audit cross-built both modes at every supported timestep.
+The exact extrema were:
 
-| Quantity | Bytes |
-|---|---:|
-| ISPM used | 16,036 |
-| DSPM static used | 6,272 |
-| Reserved stack | 2,048 |
-| Total SPM used or reserved | 24,356 |
-| Combined configured ISPM + DSPM | 131,072 |
-| Remaining SPM | 106,716 |
+| Mode | Largest ISPM used | DSPM static used | Largest total SPM used/reserved | Smallest remaining SPM |
+|---|---:|---:|---:|---:|
+| `single` | 19,200 B | 7,068 B | 28,316 B | 102,756 B |
+| `all` | 19,340 B | 7,072 B | 28,460 B | 102,612 B |
 
-The linker places the 3,204-byte constant table in `.data`, so its load image
-is present in ISPM and its runtime copy is present in DSPM. The table symbol
-itself remains exactly 3,204 bytes.
+The complete per-timestep values are written to
+`generated/egm_relative/fpga/fpga_build_summary.csv`. The audit verified in all
+ten ELFs that:
+
+- `kEgmRelativePotential` appears exactly once and is exactly 3,204 bytes;
+- the EGM and EGM-bank objects contain no floating-point, division, modulo, or
+  square-root instructions;
+- those objects do not reference division/modulo, unexpected 64-bit arithmetic,
+  floating-point conversion, or square-root helpers.
+
+The linker places the constant table in `.data`, so its load image is present
+in ISPM and its runtime copy is present in DSPM. Reserved stack is 2,048 bytes,
+and combined configured ISPM plus DSPM capacity is 131,072 bytes.
 
 ## Runtime electrode API
 
-The public interface in `inc/egm.h` is:
+The public single-channel interface in `inc/egm.h` is:
 
 ```c
 bool icc_egm_init(IccEgm *egm, int32_t electrode_x_um);
@@ -400,6 +443,23 @@ bool icc_egm_compute(
     const IccEgm *egm,
     const IccNetwork1d *network,
     IccEgmValue *result);
+```
+
+The fixed five-channel interface in `inc/egm_bank.h` is:
+
+```c
+bool icc_egm_bank_init(IccEgmBank *bank);
+bool icc_egm_bank_channel_for_x_um(
+    const IccEgmBank *bank,
+    int32_t electrode_x_um,
+    uint8_t *channel_index);
+const IccEgm *icc_egm_bank_channel(
+    const IccEgmBank *bank,
+    uint8_t channel_index);
+bool icc_egm_bank_compute(
+    const IccEgmBank *bank,
+    const IccNetwork1d *network,
+    IccEgmValue results[ICC_EGM_CHANNEL_COUNT]);
 ```
 
 The setter accepts only the five physical cell coordinates. Invalid values are
@@ -412,10 +472,9 @@ displayed; it must not modify `IccEgm.electrode_position_units`. Conversely,
 moving the EGM electrode changes only the EGM coordinate and does not select an
 ICC telemetry channel.
 
-The FPGA application currently computes one EGM electrode per execution. A
-future, optional five-channel design is recorded in
-`MULTI_ELECTRODE_FUTURE_DESIGN.md`. It preserves the single 801-entry LUT and
-the current single-electrode mode, but has not been implemented or validated.
+The implementation and validation contract for simultaneous five-channel
+computation is recorded in `MULTI_ELECTRODE_DESIGN.md`. The default
+single-channel mode and its UART2 frame remain backward compatible.
 
 ## CSV columns
 
@@ -432,14 +491,23 @@ The generated `egm_relative_lut.csv` contains:
 
 Ordinary emulator output contains sample and biological time, FlexPRET time,
 measured period, release lateness, measured execution time, electrode x,
-states and integer-nanovolt voltages for all five cells, the scaled EGM, and
-all four path states.
+states and integer-nanovolt voltages for all five cells, EGM output, and all
+four path states.
 
-Its exact header is:
+In `single` mode its exact header is:
 
 ```text
 sample,time_ms,fpga_time_ns,period_ns,release_lateness_ns,execution_time_ns,egm_electrode_x_um,cell_0_state,cell_0_nv,cell_1_state,cell_1_nv,cell_2_state,cell_2_nv,cell_3_state,cell_3_nv,cell_4_state,cell_4_nv,egm_scaled,path_0_state,path_1_state,path_2_state,path_3_state
 ```
+
+In `all` mode the single `egm_scaled` field is replaced by:
+
+```text
+egm_cell_1_scaled,egm_cell_2_scaled,egm_cell_3_scaled,egm_cell_4_scaled,egm_cell_5_scaled
+```
+
+The five values are computed after the same network step and published only
+if all five computations succeed.
 
 ## Hardware programming and application flashing
 
