@@ -4,3 +4,9 @@
 [submodule "sdk/external/printf"]
 	path = sdk/external/printf
 	url = https://github.com/pretis/printf.git
+[submodule "apps/icc-model"]
+	path = apps/icc-model
+	url = git@github.com:therealmcfly/hrt-icc-model.git
+[submodule "apps/ges"]
+	path = apps/ges
+	url = git@github.com:therealmcfly/hrt-ges.git
