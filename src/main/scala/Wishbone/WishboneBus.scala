@@ -14,8 +14,13 @@ class WishboneBusIO(
   val wbMaster = Flipped(new WishboneIO(masterWidth))
   val wbDevices = MixedVec(deviceWidths.map{i => new WishboneIO(i)})
 
-  // Master address must be big enough
-  require(masterWidth > deviceWidths.sum)
+  // // Master address must be big enough
+  // require(masterWidth > deviceWidths.sum)
+  // Ensure the master address space covers all peripheral address ranges.
+  require(
+    (BigInt(1) << masterWidth) >=
+    deviceWidths.map(w => BigInt(1) << w).sum
+  )
   // ALl slaves of same width
   for (w <- deviceWidths) require(w == deviceWidths.head)
 }

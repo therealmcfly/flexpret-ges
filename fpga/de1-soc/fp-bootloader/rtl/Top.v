@@ -29,6 +29,8 @@ module Top(
 	wire uart1_tx, uart1_rx;
 	// New UART2
 	wire uart2_tx, uart2_rx;
+  // New UART3
+	wire uart3_tx, uart3_rx;
   
   // Assign UART to specific GPIO pins // Existing UART0
   assign GPIO_0[0] = uart_tx;  // UART TX on GPIO_0[0] // TX0
@@ -40,10 +42,14 @@ module Top(
 
 		// Assign UART2
 	assign GPIO_0[4] = uart2_tx;  // TX2
-	assign uart2_rx  = GPIO_0[5]; // RX2
+	assign uart2_rx  = GPIO_0[5]; // RX2\
 
-  // Route FlexPRET port 3 bit 0 to GPIO_0[6] for synchronization pulses to the Mega.
-  assign GPIO_0[6] = sync_out[0];
+  // Assign UART3
+  assign GPIO_0[6] = uart3_tx;  // TX3
+  assign uart3_rx  = GPIO_0[7]; // RX3
+
+  // Route FlexPRET port 3 bit 0 to GPIO_0[8] for synchronization pulses to the Mega.
+  assign GPIO_0[8] = sync_out[0];
 
   // assign GPIO_0[4:11] = rfu_in;
   // assign rfu_out = GPIO_0[12:19];
@@ -51,7 +57,7 @@ module Top(
   // Set unused GPIO pins to high-Z
   genvar i;
   generate
-    for (i = 7; i < 36; i = i + 1) begin : gpio_unused
+    for (i = 9; i < 36; i = i + 1) begin : gpio_unused
       assign GPIO_0[i] = 1'bz;
     end
   endgenerate
@@ -74,6 +80,9 @@ module Top(
 		// new UART1 ports for UART2
 		.io_uart2_tx(uart2_tx),
 		.io_uart2_rx(uart2_rx),
+    // new UART1 ports for UART3
+    .io_uart3_tx(uart3_tx),
+    .io_uart3_rx(uart3_rx),
 
 		// 
     .io_gpio_in_0(SW[0]),    // Use SW[0] for GPIO inputs
