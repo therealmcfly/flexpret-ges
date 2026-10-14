@@ -51,6 +51,10 @@ are pinned here as Git submodules:
 | --- | --- |
 | `apps/icc-model` | `git@github.com:therealmcfly/hrt-icc-model.git` |
 | `apps/ges` | `git@github.com:therealmcfly/hrt-ges.git` |
+| `apps/ges-int32` | `git@github.com:therealmcfly/hrt-ges-int32.git` |
+
+`ges-int32` is the separate 32-bit EGM receiver variant. Its UART input format
+differs from `ges`; verify the sender format before using the variant.
 
 The pinned commits keep each FlexPRET checkout reproducible. To develop an
 application, create and commit changes inside its submodule first. After those
@@ -58,12 +62,12 @@ changes are pushed to the application repository, update the pinned commit in
 this repository:
 
 ```
-cd apps/icc-model                 # or apps/ges
+cd apps/icc-model                 # or apps/ges or apps/ges-int32
 git switch main
 git pull
 # create a branch, make changes, test, commit, and push
 cd ../..
-git add apps/icc-model            # or apps/ges
+git add apps/icc-model            # or apps/ges or apps/ges-int32
 git commit -m "chore: update ICC-model application"
 ```
 

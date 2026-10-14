@@ -10,3 +10,7 @@
 [submodule "apps/ges"]
 	path = apps/ges
 	url = git@github.com:therealmcfly/hrt-ges.git
+[submodule "apps/ges-int32"]
+	path = apps/ges-int32
+	url = git@github.com:therealmcfly/hrt-ges-int32.git
+	branch = main
